@@ -8,7 +8,6 @@ const {
   collection,
   query,
   where,
-  orderBy,
   onSnapshot,
   serverTimestamp,
 } = fs;
@@ -165,22 +164,24 @@ async function syncStateToFirestore(liveUsage) {
       updatedAt: serverTimestamp(),
     };
 
+    // doc(collection(...), id) أو doc(db, col, id) الاثنين شغالين
     await setDoc(doc(collection(db, AGENT_DAYS_COL), id), payload, { merge: true });
   } catch (err) {
     console.error("syncStateToFirestore error:", err);
   }
 }
 
+// *** هنا التعديل المهم ***
+// ما عاد نفلتر role في Firestore، بس نفلتر اليوم، والباقي في JS
 function subscribeSupervisorDashboard() {
   if (!currentUser || currentUser.role !== "supervisor") return;
   if (supUnsub) return;
 
   const today = getTodayKey();
+
   const q = query(
     collection(db, AGENT_DAYS_COL),
-    where("day", "==", today),
-    where("role", "==", "agent"),
-    orderBy("userId")
+    where("day", "==", today)
   );
 
   supUnsub = onSnapshot(
@@ -355,6 +356,7 @@ async function handleStatusChange(e) {
   const now = Date.now();
 
   // Meeting متاحة للجميع الآن
+
   // Break limit check
   if (
     newStatus === "break" &&
@@ -485,7 +487,10 @@ function buildSupervisorTableFromFirestore(rows) {
     unavailable: 0,
   };
 
-  rows.forEach((record) => {
+  // نفلتر هون بس الـ agents
+  const agentRows = rows.filter((r) => (r.role || "") === "agent");
+
+  agentRows.forEach((record) => {
     const status = record.status || "unavailable";
     if (totals[status] != null) totals[status] += 1;
 
