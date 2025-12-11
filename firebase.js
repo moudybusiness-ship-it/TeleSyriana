@@ -1,6 +1,6 @@
-// firebase.js  — TeleSyriana CCMS
+// firebase.js – TeleSyriana
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
   getFirestore,
   doc,
@@ -13,9 +13,9 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// نفس الكونفيغ تبع مشروعك
+// Firebase config تبع مشروعك
 const firebaseConfig = {
   apiKey: "AIzaSyDSvgD5GEZRE_zBzspoPr3pHQW1XOZr6yQ",
   authDomain: "telesyriana-ccms.firebaseapp.com",
@@ -25,9 +25,11 @@ const firebaseConfig = {
   appId: "1:867008812270:web:b87edde8d675aa5e224fff"
 };
 
+// Initialize Firebase
 export const app = initializeApp(firebaseConfig);
-export const db  = getFirestore(app);
+export const db = getFirestore(app);
 
+// نصدّر كل الفنكشنز اللي محتاجينها في app.js
 export const fs = {
   doc,
   setDoc,
