@@ -364,24 +364,28 @@ input:focus {
 
 /* Colors for each status */
 .status-in_operation {
-  background-color: #28a745 !important; /* Green */
+  background: #e4f8ea;
+  color: #1b7c3a !important; /* Green */
 }
 
 .status-break {
-  background-color: #ffc107 !important; /* Yellow */
-  color: #000 !important;
+  background: #fff3cd;
+  color: #856404;
 }
 
 .status-meeting {
-  background-color: #17a2b8 !important; /* Cyan/Blue */
+  background: #fff3cd;
+  color: #856404;
 }
 
 .status-handling {
-  background-color: #6f42c1 !important; /* Purple */
+  background: #f5cdff;
+  color: #85047f;
 }
 
 .status-unavailable {
-  background-color: #dc3545 !important; /* Red */
+  background: #e2e3e5;
+  color: #505050;
 }
 
 /* Supervisor table pills */
@@ -390,10 +394,10 @@ input:focus {
   border-radius: 6px;
   color: #fff;
   font-weight: 600;
-  font-size: 13px;
 }
 
 .hidden {
   display: none;
 }
+
 
