@@ -1,9 +1,6 @@
-// messages.js – TeleSyriana chat (Firestore realtime)
+// messages.js – TeleSyriana chat UI with Firestore
 // غرف: general + supervisors
-// - إخفاء غرفة المشرفين عن الـ agents
-// - استخدام currentUser من localStorage
-// - تخزين الرسائل في Firestore (collection: chatMessages)
-// - عرض الرسائل realtime في صفحة Messages + الشات العائم
+// الشات العائم دائماً يعرض general فقط
 
 import { db, fs } from "./firebase.js";
 
@@ -18,12 +15,28 @@ const {
 } = fs;
 
 const USER_KEY = "telesyrianaUser";
-const CHAT_COL = "chatMessages";
+const MESSAGES_COL = "globalMessages";
 
 let currentUser = null;
 let currentRoom = "general";
-let roomUnsubscribe = null;   // listener الرئيسي
-let floatUnsubscribe = null;  // listener للشات العائم (general فقط)
+
+// اشتراكات Firestore
+let unsubscribeMain = null;   // الشات الرئيسي
+let unsubscribeFloat = null;  // الشات العائم (general)
+
+// تحميل المستخدم من localStorage
+function loadUserFromStorage() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return;
+    const u = JSON.parse(raw);
+    if (u && u.id && u.name && u.role) {
+      currentUser = u;
+    }
+  } catch (e) {
+    console.error("Error loading user from localStorage", e);
+  }
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   const pageMessages = document.getElementById("page-messages");
@@ -53,11 +66,12 @@ document.addEventListener("DOMContentLoaded", () => {
     supBtn.classList.add("hidden");
   }
 
-  // إظهار زر الشات العائم فقط لما يكون في مستخدم
+  // إظهار زر البالونة فقط إذا في مستخدم داخل
   if (floatToggle && currentUser) {
     floatToggle.classList.remove("hidden");
   }
 
+  // وصف الغرف
   const ROOM_META = {
     general: {
       name: "General chat",
@@ -65,15 +79,22 @@ document.addEventListener("DOMContentLoaded", () => {
     },
     supervisors: {
       name: "Supervisors",
-      desc: "Supervisor-only space for internal notes.",
+      desc: "Supervisor-only space for internal notes and coordination.",
     },
   };
 
-  // تبديل الغرفة
+  // تبديل الغرف
   roomButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const room = btn.dataset.room;
-      switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl);
+      switchRoom(
+        room,
+        ROOM_META,
+        roomButtons,
+        roomNameEl,
+        roomDescEl,
+        listEl
+      );
     });
   });
 
@@ -82,10 +103,15 @@ document.addEventListener("DOMContentLoaded", () => {
     formEl.addEventListener("submit", async (e) => {
       e.preventDefault();
       const text = inputEl.value.trim();
-      if (!text || !currentUser) return;
+      if (!text) return;
+      if (!currentUser) {
+        alert("Please login first.");
+        return;
+      }
 
       try {
-        await addDoc(collection(db, CHAT_COL), {
+        const colRef = collection(db, MESSAGES_COL);
+        await addDoc(colRef, {
           room: currentRoom,
           text,
           userId: currentUser.id,
@@ -95,8 +121,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         inputEl.value = "";
       } catch (err) {
-        console.error("Error sending message:", err);
-        alert("Error sending message: " + (err.message || "Unknown error"));
+        console.error("Error sending message", err);
+        alert("Error sending message: " + err.message);
       }
     });
   }
@@ -107,21 +133,27 @@ document.addEventListener("DOMContentLoaded", () => {
       floatPanel.classList.toggle("hidden");
     });
   }
+
   if (floatClose && floatPanel) {
     floatClose.addEventListener("click", () => {
       floatPanel.classList.add("hidden");
     });
   }
 
-  // إرسال رسالة من الشات العائم (دائماً على general)
+  // إرسال رسالة من الشات العائم (دائماً للـ general)
   if (floatForm && floatInput) {
     floatForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const text = floatInput.value.trim();
-      if (!text || !currentUser) return;
+      if (!text) return;
+      if (!currentUser) {
+        alert("Please login first.");
+        return;
+      }
 
       try {
-        await addDoc(collection(db, CHAT_COL), {
+        const colRef = collection(db, MESSAGES_COL);
+        await addDoc(colRef, {
           room: "general",
           text,
           userId: currentUser.id,
@@ -131,50 +163,88 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         floatInput.value = "";
       } catch (err) {
-        console.error("Error sending message (floating):", err);
-        alert("Error sending message: " + (err.message || "Unknown error"));
+        console.error("Error sending message (float)", err);
+        alert("Error sending message: " + err.message);
       }
     });
   }
 
-  // أول اشتراك على غرفة general
+  // أول اشتراك: الغرفة الحالية في الشات الرئيسي
+  subscribeMainToRoom(currentRoom, listEl);
+  // اشتراك ثابت للغرفة العامة في الشات العائم
+  subscribeFloatToGeneral(floatList);
+
+  // ضبط العناوين + الزر active
   applyRoomMeta(currentRoom, ROOM_META, roomNameEl, roomDescEl);
   setActiveRoomButton(currentRoom, roomButtons);
-  subscribeToRoom(currentRoom, listEl);
-
-  // اشتراك ثابت للشات العائم على general فقط
-  subscribeFloatingChat(floatList);
 });
 
+/* ------------ Firestore subscriptions ------------ */
 
-// ----------------- Helpers -----------------
+function subscribeMainToRoom(room, listEl) {
+  if (!listEl) return;
 
-function loadUserFromStorage() {
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    if (!raw) return;
-    const u = JSON.parse(raw);
-    if (u && u.id && u.name && u.role) {
-      currentUser = u;
-    }
-  } catch (e) {
-    console.error("Error loading user from localStorage", e);
-  }
+  if (unsubscribeMain) unsubscribeMain();
+
+  const colRef = collection(db, MESSAGES_COL);
+  const qRoom = query(
+    colRef,
+    where("room", "==", room),
+    orderBy("ts", "asc")
+  );
+
+  unsubscribeMain = onSnapshot(qRoom, (snapshot) => {
+    const msgs = [];
+    snapshot.forEach((docSnap) => {
+      msgs.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    renderMainMessages(listEl, msgs);
+  });
 }
 
-function switchRoom(room, ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl) {
-  if (!room || (room !== "general" && room !== "supervisors")) return;
+function subscribeFloatToGeneral(floatList) {
+  if (!floatList) return;
+
+  if (unsubscribeFloat) unsubscribeFloat();
+
+  const colRef = collection(db, MESSAGES_COL);
+  const qGeneral = query(
+    colRef,
+    where("room", "==", "general"),
+    orderBy("ts", "asc")
+  );
+
+  unsubscribeFloat = onSnapshot(qGeneral, (snapshot) => {
+    const msgs = [];
+    snapshot.forEach((docSnap) => {
+      msgs.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    renderFloatingMessages(floatList, msgs);
+  });
+}
+
+/* ----------------- Helpers ----------------- */
+
+function switchRoom(
+  room,
+  ROOM_META,
+  roomButtons,
+  roomNameEl,
+  roomDescEl,
+  listEl
+) {
   currentRoom = room;
   applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
   setActiveRoomButton(room, roomButtons);
-  subscribeToRoom(room, listEl);
+  subscribeMainToRoom(room, listEl);
 }
 
 function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
   const meta = ROOM_META[room] || {};
   if (roomNameEl) roomNameEl.textContent = meta.name || room;
-  if (roomDescEl) roomDescEl.textContent =
-    meta.desc || "Internal chat room.";
+  if (roomDescEl)
+    roomDescEl.textContent =
+      meta.desc || "Internal chat room.";
 }
 
 function setActiveRoomButton(room, roomButtons) {
@@ -187,80 +257,11 @@ function setActiveRoomButton(room, roomButtons) {
   });
 }
 
+/* ----------------- Rendering ----------------- */
 
-// ----------------- Firestore subscriptions -----------------
-
-function subscribeToRoom(room, listEl) {
-  // فك الاشتراك القديم
-  if (roomUnsubscribe) {
-    roomUnsubscribe();
-    roomUnsubscribe = null;
-  }
+function renderMainMessages(listEl, msgs) {
   if (!listEl) return;
 
-  const qRoom = query(
-    collection(db, CHAT_COL),
-    where("room", "==", room),
-    orderBy("ts", "asc")
-  );
-
-  roomUnsubscribe = onSnapshot(
-    qRoom,
-    (snapshot) => {
-      const msgs = [];
-      snapshot.forEach((doc) => {
-        const d = doc.data();
-        msgs.push({
-          id: doc.id,
-          ...d,
-        });
-      });
-      renderMessages(listEl, msgs);
-    },
-    (err) => {
-      console.error("Error listening to room:", err);
-    }
-  );
-}
-
-function subscribeFloatingChat(floatList) {
-  if (!floatList) return;
-
-  if (floatUnsubscribe) {
-    floatUnsubscribe();
-    floatUnsubscribe = null;
-  }
-
-  const qGeneral = query(
-    collection(db, CHAT_COL),
-    where("room", "==", "general"),
-    orderBy("ts", "asc")
-  );
-
-  floatUnsubscribe = onSnapshot(
-    qGeneral,
-    (snapshot) => {
-      const msgs = [];
-      snapshot.forEach((doc) => {
-        const d = doc.data();
-        msgs.push({
-          id: doc.id,
-          ...d,
-        });
-      });
-      renderFloatingMessages(floatList, msgs);
-    },
-    (err) => {
-      console.error("Error listening to floating chat:", err);
-    }
-  );
-}
-
-
-// ----------------- Rendering -----------------
-
-function renderMessages(listEl, msgs) {
-  if (!listEl) return;
   listEl.innerHTML = "";
 
   msgs.forEach((m) => {
@@ -290,6 +291,7 @@ function renderMessages(listEl, msgs) {
 
 function renderFloatingMessages(floatList, msgs) {
   if (!floatList) return;
+
   floatList.innerHTML = "";
 
   msgs.forEach((m) => {
@@ -319,13 +321,21 @@ function renderFloatingMessages(floatList, msgs) {
 
 function formatTime(ts) {
   if (!ts) return "";
-  // ts ممكن يكون Timestamp تبع Firestore
+  // ts ممكن يكون Timestamp تبع Firestore أو Date عادي
+  let dateObj;
   if (ts.toDate) {
-    ts = ts.toDate();
+    dateObj = ts.toDate();
+  } else if (ts instanceof Date) {
+    dateObj = ts;
+  } else {
+    dateObj = new Date(ts);
   }
-  const d = ts instanceof Date ? ts : new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return dateObj.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
+
 
 
 
