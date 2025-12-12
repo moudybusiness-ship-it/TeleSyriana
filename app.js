@@ -567,13 +567,19 @@ function updateDashboardUI() {
 }
 
 function updateBreakUI(used) {
-  // keep break counter as minutes (because limit is 45 and it's clearer)
-  document.getElementById("break-used").textContent = Math.floor(used);
-  document.getElementById("break-remaining").textContent = Math.max(
-    0,
-    BREAK_LIMIT_MIN - Math.floor(used)
-  );
+  const usedMin = Math.floor(used);
+  const remaining = Math.max(0, BREAK_LIMIT_MIN - usedMin);
+
+  document.getElementById("break-used").textContent = usedMin;
+  document.getElementById("break-remaining").textContent = remaining;
+
+  // ✅ widget ring
+  const breakText = document.getElementById("break-text");
+  if (breakText) breakText.textContent = `${usedMin} / ${BREAK_LIMIT_MIN}`;
+
+  setRing((usedMin / BREAK_LIMIT_MIN) * 100);
 }
+
 
 function updateStatusMinutesUI(live) {
   // ✅ NEW: show in hr/min format
@@ -676,6 +682,14 @@ function showDashboard() {
 
   switchPage("home");
   updateDashboardUI();
+
+  // ✅ widgets
+  renderClockWidget();
+  buildMiniCalendar();
+  hookCalendarButtons();
+  setInterval(renderClockWidget, 1000);
 }
+
+
 
 
