@@ -175,98 +175,101 @@
       </section>
 
       <!-- MESSAGES PAGE -->
-<section id="page-messages" class="page-section hidden">
-  <section class="card messages-card">
-    <div class="messages-layout">
-      <!-- Left: rooms / people list -->
-      <aside class="messages-sidebar">
-        <div class="messages-sidebar-header">
-          Rooms
-        </div>
+      <section id="page-messages" class="page-section hidden">
+        <section class="card messages-card">
+          <div class="messages-layout">
+            <!-- Left: rooms / people list -->
+            <aside class="messages-sidebar">
+              <div class="messages-sidebar-header">
+                Rooms
+              </div>
 
-        <!-- غرفة عامة -->
-        <button class="chat-room active" data-room="general">
-          <div class="chat-room-title">General chat</div>
-          <div class="chat-room-sub">
-            All agents &amp; supervisors
-          </div>
-        </button>
+              <!-- غرفة عامة -->
+              <button class="chat-room active" data-room="general">
+                <div class="chat-room-title">General chat</div>
+                <div class="chat-room-sub">
+                  All agents &amp; supervisors
+                </div>
+              </button>
 
-        <!-- غرفة خاصة بالمشرفين -->
-        <button class="chat-room" data-room="supervisors">
-          <div class="chat-room-title">
-            Supervisors
-            <span class="room-badge">Supervisor only</span>
-          </div>
-          <div class="chat-room-sub">
-            Internal supervisor notes
-          </div>
-        </button>
+              <!-- غرفة خاصة بالمشرفين -->
+              <button class="chat-room" data-room="supervisors">
+                <div class="chat-room-title">
+                  Supervisors
+                  <span class="room-badge">Supervisor only</span>
+                </div>
+                <div class="chat-room-sub">
+                  Internal supervisor notes
+                </div>
+              </button>
 
-        <!-- مثال على “Direct message” ثابتة حالياً -->
-        <div class="messages-sidebar-header small">
-          Direct profiles (demo)
-        </div>
+              <!-- مثال على “Direct message” ثابتة حالياً -->
+              <div class="messages-sidebar-header small">
+                Direct profiles (demo)
+              </div>
 
-        <div class="chat-profile">
-          <div class="chat-avatar small role-agent">A1</div>
-          <div class="chat-profile-text">
-            <div class="chat-profile-name">Agent 01</div>
-            <div class="chat-profile-role">Agent</div>
-          </div>
-        </div>
+              <div class="chat-profile">
+                <div class="chat-avatar small role-agent">A1</div>
+                <div class="chat-profile-text">
+                  <div class="chat-profile-name">Agent 01</div>
+                  <div class="chat-profile-role">Agent</div>
+                </div>
+              </div>
 
-        <div class="chat-profile">
-          <div class="chat-avatar small role-agent">A2</div>
-          <div class="chat-profile-text">
-            <div class="chat-profile-name">Agent 02</div>
-            <div class="chat-profile-role">Agent</div>
-          </div>
-        </div>
+              <div class="chat-profile">
+                <div class="chat-avatar small role-agent">A2</div>
+                <div class="chat-profile-text">
+                  <div class="chat-profile-name">Agent 02</div>
+                  <div class="chat-profile-role">Agent</div>
+                </div>
+              </div>
 
-        <div class="chat-profile">
-          <div class="chat-avatar small role-supervisor">SD</div>
-          <div class="chat-profile-text">
-            <div class="chat-profile-name">Supervisor Dema</div>
-            <div class="chat-profile-role">Supervisor</div>
-          </div>
-        </div>
-      </aside>
+              <div class="chat-profile">
+                <div class="chat-avatar small role-supervisor">SD</div>
+                <div class="chat-profile-text">
+                  <div class="chat-profile-name">Supervisor Dema</div>
+                  <div class="chat-profile-role">Supervisor</div>
+                </div>
+              </div>
+            </aside>
 
-      <!-- Right: chat area -->
-      <div class="messages-main">
-        <!-- Header فوق الشات -->
-        <header class="chat-header">
-          <div>
-            <div class="chat-room-name" id="chat-room-name">General chat</div>
-            <div class="chat-room-desc" id="chat-room-desc">
-              Be respectful • No customer data • English / Arabic welcome
+            <!-- Right: chat area -->
+            <div class="messages-main">
+              <!-- Header فوق الشات -->
+              <header class="chat-header">
+                <div>
+                  <div class="chat-room-name" id="chat-room-name">General chat</div>
+                  <div class="chat-room-desc" id="chat-room-desc">
+                    Be respectful • No customer data • English / Arabic welcome
+                  </div>
+                </div>
+              </header>
+
+              <!-- ChatGPT banner -->
+              <div class="chat-ai-banner">
+                <strong>ChatGPT-5 Assistant</strong> – coming soon to help you learn, ask questions, and improve calls.
+              </div>
+
+              <!-- قائمة الرسائل -->
+              <div id="chat-message-list" class="chat-message-list">
+                <!-- رح تتعبّى بالـ JS -->
+              </div>
+
+              <!-- شريط الكتابة -->
+              <form id="chat-form" class="chat-input-row">
+                <input
+                  id="chat-input"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Type a message…"
+                  class="chat-input"
+                />
+                <button type="submit" class="chat-send-btn">Send</button>
+              </form>
             </div>
           </div>
-        </header>
-
-        <!-- قائمة الرسائل -->
-        <div id="chat-message-list" class="chat-message-list">
-          <!-- رح تتعبّى بالـ JS -->
-        </div>
-
-        <!-- شريط الكتابة -->
-        <form id="chat-form" class="chat-input-row">
-          <input
-            id="chat-input"
-            type="text"
-            autocomplete="off"
-            placeholder="Type a message…"
-            class="chat-input"
-          />
-          <button type="submit" class="chat-send-btn">Send</button>
-        </form>
-      </div>
-    </div>
-  </section>
-</section>
-
-
+        </section>
+      </section>
 
       <!-- PAGE: SETTINGS -->
       <section id="page-settings" class="page-section hidden">
@@ -299,8 +302,47 @@
     </main>
   </div>
 
+  <!-- Floating chat bubble (bottom-right) -->
+  <button
+    id="floating-chat-toggle"
+    class="floating-chat-toggle hidden"
+    aria-label="Open chat"
+  >
+    💬
+  </button>
+
+  <!-- Floating mini chat panel -->
+  <div id="floating-chat-panel" class="floating-chat-panel hidden">
+    <header class="floating-chat-header">
+      <div class="floating-chat-title">TeleSyriana Chat</div>
+      <button id="floating-chat-close" class="floating-chat-close">×</button>
+    </header>
+
+    <div class="floating-chat-body">
+      <div class="floating-chat-room-name">General chat</div>
+      <div class="floating-chat-note">
+        Same company rules apply • No customer data • Be kind
+      </div>
+
+      <div class="floating-chat-messages" id="floating-chat-messages">
+        <!-- هنحط هنا آخر الرسائل / ديزاين مبدئي -->
+      </div>
+    </div>
+
+    <form id="floating-chat-form" class="floating-chat-input-row">
+      <input
+        id="floating-chat-input"
+        type="text"
+        autocomplete="off"
+        placeholder="Type a quick message…"
+      />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
   <script type="module" src="app.js"></script>
   <script type="module" src="messages.js"></script>
 </body>
 
 </html>
+
