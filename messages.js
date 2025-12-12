@@ -1,4 +1,11 @@
-// messages.js – Firestore chat (NO limit()) + lazy render on scroll up
+// messages.js — TeleSyriana Firestore Chat
+// ✅ NO limit() (نعمل lazy render من الكاش)
+// ✅ Main Messages: ما بيفتح General تلقائي — بيكون Start chatting
+// ✅ Floating Chat: general فقط
+// ✅ DM (Direct chat): بين الموظفين (dm_1001_1002)
+// ✅ AI Room: coming soon (بدون Firestore)
+// ✅ ما منتحكم بإظهار/إخفاء زر 💬 هون (هذا شغل app.js فقط)
+
 import { db, fs } from "./firebase.js";
 
 const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } = fs;
@@ -6,23 +13,49 @@ const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp }
 const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 
-let currentUser = null;
-let currentRoom = "general";
-
-let unsubscribeMain = null;
-let unsubscribeFloat = null;
-
-// ====== "بديل limit": نعرض فقط آخر N بالواجهة ======
+// ====== Lazy render (بديل limit) ======
 const PAGE_SIZE = 50;
 const MAX_RENDER = 600;
 
-// cache للغرفة الحالية (ASC: القديم -> الجديد)
+// ====== Rooms ======
+const ROOM_META = {
+  general: {
+    name: "General chat",
+    desc: "All agents & supervisors • Be respectful • No customer data.",
+    showRole: true,
+  },
+  supervisors: {
+    name: "Supervisors",
+    desc: "Supervisor-only space for internal notes and coordination.",
+    showRole: true,
+  },
+  ai_chat: {
+    name: "ChatGPT 5",
+    desc: "AI assistant (coming soon).",
+    showRole: false,
+  },
+};
+
+// ====== State ======
+let currentUser = null;
+
+// main room state
+let activeRoomId = null;          // مثال: "general" أو "dm_1001_1002"
+let activeRoomKind = "none";      // "none" | "group" | "dm" | "ai"
+let activeShowRole = true;
+
+// firestore unsub
+let unsubscribeMain = null;
+let unsubscribeFloat = null;
+
+// main cache (ASC: القديم -> الجديد)
 let roomCache = [];
 let renderedCount = 0;
 
-// لمنع تكرار ربط السكرول على نفس list
+// لمنع تكرار bind scroll على نفس list
 let scrollBoundEl = null;
 
+// ====== Helpers ======
 function getUserFromStorage() {
   try {
     const raw = localStorage.getItem(USER_KEY);
@@ -33,7 +66,7 @@ function getUserFromStorage() {
   return null;
 }
 
-function setCurrentUser() {
+function refreshCurrentUser() {
   currentUser = getUserFromStorage();
 }
 
@@ -41,6 +74,24 @@ function formatTime(ts) {
   if (!ts) return "";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function roomIdForDm(idA, idB) {
+  const a = String(idA);
+  const b = String(idB);
+  const [min, max] = a < b ? [a, b] : [b, a];
+  return `dm_${min}_${max}`;
+}
+
+function isMessagesPageVisible() {
+  const page = document.getElementById("page-messages");
+  if (!page) return false;
+  return !page.classList.contains("hidden");
+}
+
+function closeFloatingPanel() {
+  const panel = document.getElementById("float-chat-panel");
+  if (panel) panel.classList.add("hidden");
 }
 
 function ensureTopLoader(listEl) {
@@ -103,7 +154,7 @@ function renderChunkToTop(listEl, items, showRole) {
   const frag = document.createDocumentFragment();
   items.forEach((m) => frag.appendChild(createMessageNode(m, showRole)));
 
-  // ✅ حط الرسائل بعد اللودر مباشرة
+  // حط الرسائل بعد اللودر مباشرة
   const afterLoader = loader.nextSibling;
   if (afterLoader) listEl.insertBefore(frag, afterLoader);
   else listEl.appendChild(frag);
@@ -112,21 +163,8 @@ function renderChunkToTop(listEl, items, showRole) {
   listEl.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
 }
 
-function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
-  const meta = ROOM_META[room] || {};
-  if (roomNameEl) roomNameEl.textContent = meta.name || room;
-  if (roomDescEl) roomDescEl.textContent = meta.desc || "Internal chat room.";
-}
-
-function setActiveRoomButton(room, roomButtons) {
-  roomButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.room === room));
-}
-
-// ====== تحميل قديم عند scroll up (من الكاش فقط) ======
 function attachScrollLoader(listEl) {
   if (!listEl) return;
-
-  // ✅ لا تربطه مرتين على نفس الـ element
   if (scrollBoundEl === listEl) return;
   scrollBoundEl = listEl;
 
@@ -138,8 +176,8 @@ function attachScrollLoader(listEl) {
     const total = roomCache.length;
     const alreadyRenderedStartIndex = Math.max(0, total - renderedCount);
 
-    if (alreadyRenderedStartIndex <= 0) return; // ما في أقدم
-    if (renderedCount >= MAX_RENDER) return; // حماية
+    if (alreadyRenderedStartIndex <= 0) return;
+    if (renderedCount >= MAX_RENDER) return;
 
     loader.style.display = "block";
 
@@ -148,41 +186,81 @@ function attachScrollLoader(listEl) {
     const chunk = roomCache.slice(newStart, alreadyRenderedStartIndex);
 
     renderedCount += chunk.length;
-    renderChunkToTop(listEl, chunk, true);
+    renderChunkToTop(listEl, chunk, activeShowRole);
 
     setTimeout(() => (loader.style.display = "none"), 150);
   });
 }
 
-// ====== الاشتراك الرئيسي ======
-function subscribeMainToRoom(room, listEl) {
+function setHeader(roomNameEl, roomDescEl, title, desc) {
+  if (roomNameEl) roomNameEl.textContent = title;
+  if (roomDescEl) roomDescEl.textContent = desc;
+}
+
+function setStartChattingUI(listEl, roomNameEl, roomDescEl, inputEl) {
+  // ما في room مختار
+  activeRoomId = null;
+  activeRoomKind = "none";
+  activeShowRole = true;
+
+  unsubscribeMain?.();
+  unsubscribeMain = null;
+
+  roomCache = [];
+  renderedCount = 0;
+  scrollBoundEl = null;
+
+  if (listEl) {
+    listEl.innerHTML = `
+      <div style="padding:14px 10px; color:#777; font-size:13px;">
+        <strong>Start chatting</strong><br/>
+        اختر Room (General / Supervisors) أو افتح Direct chat من القائمة.
+      </div>
+    `;
+  }
+
+  setHeader(roomNameEl, roomDescEl, "Start chatting", "Choose a room or a direct chat.");
+  if (inputEl) {
+    inputEl.value = "";
+    inputEl.disabled = true;
+    inputEl.placeholder = "Choose a room first…";
+  }
+}
+
+function setActiveRoomButton(roomButtons, roomId) {
+  roomButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.room === roomId));
+}
+
+// ====== Firestore subscribe (Main) ======
+function subscribeMainToRoom(roomId, listEl) {
   if (!listEl) return;
+
   unsubscribeMain?.();
 
-  // ✅ متوافق مع index: room + ts DESC
+  // ✅ متوافق مع index الموجود عادة: room + ts DESC
   const qRoom = query(
     collection(db, MESSAGES_COL),
-    where("room", "==", room),
+    where("room", "==", roomId),
     orderBy("ts", "desc")
   );
 
   unsubscribeMain = onSnapshot(
     qRoom,
     (snapshot) => {
-      setCurrentUser();
+      refreshCurrentUser();
 
       const all = [];
       snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
 
-      // DESC => نخليه cache ASC
-      all.reverse();
+      // snapshot حاليا DESC (الجديد -> القديم)
+      all.reverse(); // نخليه ASC (القديم -> الجديد)
       roomCache = all;
 
       renderedCount = Math.min(PAGE_SIZE, roomCache.length);
       const startIndex = Math.max(0, roomCache.length - renderedCount);
       const initial = roomCache.slice(startIndex);
 
-      renderFresh(listEl, initial, true);
+      renderFresh(listEl, initial, activeShowRole);
       attachScrollLoader(listEl);
     },
     (err) => {
@@ -192,9 +270,10 @@ function subscribeMainToRoom(room, listEl) {
   );
 }
 
-// ====== الشات العائم (general فقط) ======
+// ====== Firestore subscribe (Floating - general only) ======
 function subscribeFloatToGeneral(floatList) {
   if (!floatList) return;
+
   unsubscribeFloat?.();
 
   const qGeneral = query(
@@ -206,7 +285,7 @@ function subscribeFloatToGeneral(floatList) {
   unsubscribeFloat = onSnapshot(
     qGeneral,
     (snapshot) => {
-      setCurrentUser();
+      refreshCurrentUser();
 
       const all = [];
       snapshot.forEach((d) => all.push({ id: d.id, ...d.data() }));
@@ -219,25 +298,135 @@ function subscribeFloatToGeneral(floatList) {
       last.forEach((m) => frag.appendChild(createMessageNode(m, false)));
       floatList.appendChild(frag);
       floatList.scrollTop = floatList.scrollHeight;
+
+      // ✅ أمان: إذا المستخدم فات على messages page، سكّر اللوحة فوراً (حتى لو انفتحت بالغلط)
+      if (isMessagesPageVisible()) closeFloatingPanel();
     },
-    (err) => {
-      console.error("Float snapshot error:", err);
-    }
+    (err) => console.error("Float snapshot error:", err)
   );
 }
 
-// ====== init ======
-document.addEventListener("DOMContentLoaded", () => {
-  // ✅ تصحيح: getElementById (مو ByID)
-  const hasMainChat = !!document.getElementById("chat-message-list");
+// ====== Room opening ======
+function openGroupRoom(roomId, listEl, roomNameEl, roomDescEl, inputEl, roomButtons) {
+  const meta = ROOM_META[roomId] || { name: roomId, desc: "Internal chat room.", showRole: true };
 
-  const roomButtons = document.querySelectorAll(".chat-room");
+  activeRoomId = roomId;
+  activeRoomKind = "group";
+  activeShowRole = !!meta.showRole;
+
+  setHeader(roomNameEl, roomDescEl, meta.name, meta.desc);
+  setActiveRoomButton(roomButtons, roomId);
+
+  if (inputEl) {
+    inputEl.disabled = false;
+    inputEl.placeholder = "Type a message…";
+  }
+
+  // reset loader binding (مهم عند تغيير الغرفة)
+  scrollBoundEl = null;
+  renderedCount = 0;
+  roomCache = [];
+
+  subscribeMainToRoom(roomId, listEl);
+}
+
+function openDmRoom(otherUserId, otherUserName, listEl, roomNameEl, roomDescEl, inputEl, roomButtons) {
+  if (!currentUser) return;
+
+  activeRoomId = roomIdForDm(currentUser.id, otherUserId);
+  activeRoomKind = "dm";
+  activeShowRole = false;
+
+  // الغرف العامة شيل active عنها
+  setActiveRoomButton(roomButtons, "__none__");
+
+  setHeader(
+    roomNameEl,
+    roomDescEl,
+    `Direct chat • ${otherUserName}`,
+    `Private chat between ${currentUser.name} and ${otherUserName}`
+  );
+
+  if (inputEl) {
+    inputEl.disabled = false;
+    inputEl.placeholder = `Message ${otherUserName}…`;
+  }
+
+  scrollBoundEl = null;
+  renderedCount = 0;
+  roomCache = [];
+
+  subscribeMainToRoom(activeRoomId, listEl);
+}
+
+function openAiRoom(listEl, roomNameEl, roomDescEl, inputEl, roomButtons) {
+  activeRoomId = "ai_chat";
+  activeRoomKind = "ai";
+  activeShowRole = false;
+
+  // شيل active عن الغرف العامة
+  setActiveRoomButton(roomButtons, "__none__");
+
+  setHeader(roomNameEl, roomDescEl, ROOM_META.ai_chat.name, ROOM_META.ai_chat.desc);
+
+  unsubscribeMain?.();
+  unsubscribeMain = null;
+
+  if (inputEl) {
+    inputEl.value = "";
+    inputEl.disabled = true;
+    inputEl.placeholder = "AI assistant coming soon…";
+  }
+
+  if (listEl) {
+    listEl.innerHTML = `
+      <div style="padding:14px 10px; color:#777; font-size:13px;">
+        <strong>Coming soon…</strong><br/>
+        ChatGPT room will be enabled in a future update.
+      </div>
+    `;
+  }
+}
+
+// ====== Sending ======
+async function sendMessage(text) {
+  refreshCurrentUser();
+  if (!currentUser) {
+    alert("Please login first.");
+    return;
+  }
+
+  if (!activeRoomId || activeRoomKind === "none") {
+    alert("Choose a room first.");
+    return;
+  }
+
+  if (activeRoomKind === "ai") {
+    alert("ChatGPT room is coming soon.");
+    return;
+  }
+
+  await addDoc(collection(db, MESSAGES_COL), {
+    room: activeRoomId,
+    text,
+    userId: currentUser.id,
+    name: currentUser.name,
+    role: currentUser.role,
+    ts: serverTimestamp(),
+  });
+}
+
+// ====== Init ======
+document.addEventListener("DOMContentLoaded", () => {
+  // main elements
+  const listEl = document.getElementById("chat-message-list");
   const roomNameEl = document.getElementById("chat-room-name");
   const roomDescEl = document.getElementById("chat-room-desc");
-  const listEl = document.getElementById("chat-message-list");
+  const roomButtons = document.querySelectorAll(".chat-room");
   const formEl = document.getElementById("chat-form");
   const inputEl = document.getElementById("chat-input");
 
+  // floating elements (ids لازم تكون فريدة بالصفحة!)
   const floatToggle = document.getElementById("float-chat-toggle");
   const floatPanel = document.getElementById("float-chat-panel");
   const floatClose = document.getElementById("float-chat-close");
@@ -245,7 +434,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const floatForm = document.getElementById("float-chat-form");
   const floatInput = document.getElementById("float-chat-input");
 
-  setCurrentUser();
+  refreshCurrentUser();
+
+  // اخفاء supervisors عن agent
+  const supBtn = document.querySelector('.chat-room[data-room="supervisors"]');
+  if (supBtn && (!currentUser || currentUser.role !== "supervisor")) supBtn.classList.add("hidden");
 
   // scroll styles
   if (listEl) {
@@ -257,35 +450,78 @@ document.addEventListener("DOMContentLoaded", () => {
     floatList.style.maxHeight = "220px";
   }
 
-  const ROOM_META = {
-    general: {
-      name: "General chat",
-      desc: "All agents & supervisors • Be respectful • No customer data.",
-    },
-    supervisors: {
-      name: "Supervisors",
-      desc: "Supervisor-only space for internal notes and coordination.",
-    },
-  };
+  // ✅ Main chat starts empty (no default room)
+  if (listEl) setStartChattingUI(listEl, roomNameEl, roomDescEl, inputEl);
 
-  // اخفاء supervisors عن agent
-  const supBtn = document.querySelector('.chat-room[data-room="supervisors"]');
-  if (supBtn && (!currentUser || currentUser.role !== "supervisor")) supBtn.classList.add("hidden");
+  // group room buttons
+  roomButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const roomId = btn.dataset.room;
+      if (!roomId) return;
 
-  // ✅ pop chat: شغّله بكل الصفحات إذا المستخدم موجود
-  if (floatToggle && currentUser) floatToggle.classList.remove("hidden");
+      // group rooms فقط من هالأزرار
+      openGroupRoom(roomId, listEl, roomNameEl, roomDescEl, inputEl, roomButtons);
+    });
+  });
 
-  // floating open/close
-  floatToggle?.addEventListener("click", () => floatPanel?.classList.toggle("hidden"));
-  floatClose?.addEventListener("click", () => floatPanel?.classList.add("hidden"));
+  // ✅ Direct profiles (DM)
+  // لازم تحط data-userid + data-name على كل .chat-profile يلي بدك يفتح DM
+  // مثال: <div class="chat-profile" data-userid="1002" data-name="Agent 02">
+  document.querySelectorAll(".chat-profile[data-userid]").forEach((el) => {
+    el.addEventListener("click", () => {
+      refreshCurrentUser();
+      if (!currentUser) return alert("Please login first.");
 
-  // floating send
-  floatForm?.addEventListener("submit", async (e) => {
+      const otherId = el.getAttribute("data-userid");
+      const otherName = el.getAttribute("data-name") || "User";
+
+      // ما تفتح DM مع نفسك
+      if (String(otherId) === String(currentUser.id)) return;
+
+      // إذا هذا AI
+      if (otherId === "ai") {
+        openAiRoom(listEl, roomNameEl, roomDescEl, inputEl, roomButtons);
+        return;
+      }
+
+      openDmRoom(otherId, otherName, listEl, roomNameEl, roomDescEl, inputEl, roomButtons);
+    });
+  });
+
+  // sending main
+  formEl?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const text = floatInput.value.trim();
+    const text = (inputEl?.value || "").trim();
     if (!text) return;
 
-    setCurrentUser();
+    try {
+      await sendMessage(text);
+      inputEl.value = "";
+    } catch (err) {
+      console.error("Error sending message:", err);
+      alert("Error sending message: " + err.message);
+    }
+  });
+
+  // floating open/close (بس app.js بيقرر إذا الزر ظاهر أو مخفي)
+  floatToggle?.addEventListener("click", () => {
+    // ✅ إذا نحن ضمن صفحة messages، ما تفتح floating أصلاً
+    if (isMessagesPageVisible()) {
+      closeFloatingPanel();
+      return;
+    }
+    floatPanel?.classList.toggle("hidden");
+  });
+
+  floatClose?.addEventListener("click", () => floatPanel?.classList.add("hidden"));
+
+  // floating send (general فقط)
+  floatForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = (floatInput?.value || "").trim();
+    if (!text) return;
+
+    refreshCurrentUser();
     if (!currentUser) return alert("Please login first.");
 
     try {
@@ -299,65 +535,27 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       floatInput.value = "";
     } catch (err) {
-      console.error("Error sending message (float)", err);
+      console.error("Error sending message (float):", err);
       alert("Error sending message: " + err.message);
     }
   });
 
-  // ✅ main chat: فقط إذا الصفحة فيها عناصر المسجات
-  if (hasMainChat && listEl) {
-    applyRoomMeta(currentRoom, ROOM_META, roomNameEl, roomDescEl);
-    setActiveRoomButton(currentRoom, roomButtons);
-
-    roomButtons.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const room = btn.dataset.room;
-        currentRoom = room;
-
-        applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
-        setActiveRoomButton(room, roomButtons);
-
-        // reset binding when switching room
-        scrollBoundEl = null;
-
-        subscribeMainToRoom(room, listEl);
-      });
-    });
-
-    formEl?.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const text = inputEl.value.trim();
-      if (!text) return;
-
-      setCurrentUser();
-      if (!currentUser) return alert("Please login first.");
-
-      try {
-        await addDoc(collection(db, MESSAGES_COL), {
-          room: currentRoom,
-          text,
-          userId: currentUser.id,
-          name: currentUser.name,
-          role: currentUser.role,
-          ts: serverTimestamp(),
-        });
-        inputEl.value = "";
-      } catch (err) {
-        console.error("Error sending message", err);
-        alert("Error sending message: " + err.message);
-      }
-    });
-
-    subscribeMainToRoom(currentRoom, listEl);
-  }
-
-  // ✅ floating subscription دائماً
+  // floating subscription دائماً (حتى لو الزر hidden)
   subscribeFloatToGeneral(floatList);
-});
 
-// ✅ إذا بتعمل login بدون refresh: نقدر نحدّث زر 💬
-window.addEventListener("telesyriana:user-changed", () => {
-  setCurrentUser();
-  const floatToggle = document.getElementById("float-chat-toggle");
-  if (floatToggle && currentUser) floatToggle.classList.remove("hidden");
+  // ✅ إذا عملت login/logout بدون refresh
+  window.addEventListener("telesyriana:user-changed", () => {
+    refreshCurrentUser();
+
+    // supervisors button
+    const supBtn2 = document.querySelector('.chat-room[data-room="supervisors"]');
+    if (supBtn2 && (!currentUser || currentUser.role !== "supervisor")) supBtn2.classList.add("hidden");
+    if (supBtn2 && currentUser && currentUser.role === "supervisor") supBtn2.classList.remove("hidden");
+
+    // رجّع main chat لحالة Start chatting
+    if (listEl) setStartChattingUI(listEl, roomNameEl, roomDescEl, inputEl);
+
+    // سكّر floating panel احتياط
+    closeFloatingPanel();
+  });
 });
