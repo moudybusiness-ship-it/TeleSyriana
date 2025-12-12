@@ -21,7 +21,7 @@ body {
 /* Layout wrapper */
 .app-wrapper {
   width: 100%;
-  max-width: 1100px; /* دايماً واسع، بس منتحكم بالكروت جواته */
+  max-width: 1100px; /* دايماً واسع شوي */
   padding: 16px;
 }
 
@@ -34,7 +34,7 @@ body {
   margin-bottom: 16px;
 }
 
-/* Nav (left – only after login) */
+/* Nav (left – only after login, JS بيشيل/يحط hidden) */
 .main-nav {
   display: flex;
   gap: 10px;
@@ -50,10 +50,17 @@ body {
   font-size: 12px;
   cursor: pointer;
   backdrop-filter: blur(4px);
+  transition: background 0.15s ease, transform 0.05s ease;
 }
 
 .nav-link:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.nav-link.active {
+  background: #ffffff;
+  color: #ff2c8b;
+  transform: translateY(-1px);
 }
 
 /* Right side header */
@@ -104,19 +111,22 @@ body {
   margin: auto;
   gap: 20px;
 }
+
+/* Left side: banner full height, top-cropped */
 .login-banner {
-  flex: 1; /* ياخذ 50% من الشاشة */
+  flex: 1;
   height: 100%;
-  max-height: 500px; /* نفس ارتفاع اللوجين تقريبا */
+  max-height: 500px;
   overflow: hidden;
   border-radius: 18px;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
 }
+
 .banner-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: top; /* قص الأسفل وخلّي الأعلى ظاهر */
+  object-position: top; /* يورجي أعلى الصورة ويقص أسفلها */
   display: block;
 }
 
@@ -126,6 +136,7 @@ body {
   max-width: 420px;
 }
 
+/* Extra (لو استعملنا event panel داخلي مستقبلاً) */
 .login-event-panel {
   flex: 1;
   display: flex;
@@ -212,6 +223,14 @@ body {
   .header-right {
     text-align: center;
   }
+
+  .main-nav {
+    order: 2;
+  }
+
+  .login-banner {
+    max-height: 260px;
+  }
 }
 
 /* Forms */
@@ -221,7 +240,8 @@ label {
   margin-bottom: 10px;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   margin-top: 4px;
   padding: 9px 10px;
@@ -230,9 +250,12 @@ input {
   border: 1px solid #d0d0d0;
   outline: none;
   transition: border 0.15s ease, box-shadow 0.15s ease;
+  font-family: inherit;
+  resize: vertical;
 }
 
-input:focus {
+input:focus,
+textarea:focus {
   border-color: #ff2c8b;
   box-shadow: 0 0 0 2px rgba(255, 44, 139, 0.15);
 }
@@ -486,8 +509,229 @@ input:focus {
   color: #505050;
 }
 
+/* ---------------- CHAT (Messages page) ---------------- */
+
+.chat-layout {
+  display: flex;
+  height: 420px;
+}
+
+/* Left panel: conversation list */
+.chat-sidebar {
+  width: 230px;
+  border-right: 1px solid #eee;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-sidebar-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+}
+
+.chat-conversations {
+  list-style: none;
+  padding: 6px;
+  margin: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.chat-conversation {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+
+.chat-conversation:hover {
+  background: #f0f0f0;
+}
+
+.chat-conversation.active {
+  background: #ffeff8;
+  color: #c2185b;
+  font-weight: 600;
+}
+
+.chat-conversation.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Right panel: chat window */
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+}
+
+.chat-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chat-subtitle {
+  font-size: 11px;
+  color: #777;
+}
+
+/* Messages list */
+.chat-messages {
+  flex: 1;
+  padding: 12px 14px;
+  background: #f7f7f7;
+  overflow-y: auto;
+}
+
+.chat-message {
+  margin-bottom: 10px;
+  max-width: 80%;
+}
+
+.chat-message.you {
+  margin-left: auto;
+  text-align: right;
+}
+
+.chat-message.other {
+  margin-right: auto;
+  text-align: left;
+}
+
+.chat-bubble {
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 18px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.chat-message.you .chat-bubble {
+  background: #ff2c8b;
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-message.other .chat-bubble {
+  background: #ffffff;
+  color: #333;
+  border-bottom-left-radius: 4px;
+}
+
+.chat-meta {
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+}
+
+/* Chat input row */
+.chat-input-row {
+  display: flex;
+  padding: 8px 10px;
+  border-top: 1px solid #eee;
+  background: #ffffff;
+  gap: 8px;
+}
+
+.chat-input-row input {
+  flex: 1;
+  margin-top: 0;
+}
+
+.chat-input-row button {
+  border-radius: 999px;
+  border: none;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(135deg, #ff2c8b, #ff5db6);
+  color: #fff;
+}
+
+/* Chat responsive */
+@media (max-width: 768px) {
+  .chat-layout {
+    flex-direction: column;
+    height: 420px;
+  }
+
+  .chat-sidebar {
+    width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid #eee;
+    overflow-x: auto;
+  }
+
+  .chat-conversations {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .chat-conversation {
+    white-space: nowrap;
+  }
+}
+
+/* ---------------- SETTINGS PAGE ---------------- */
+
+.settings-form {
+  margin-top: 12px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin-bottom: 12px;
+}
+
+.settings-form label {
+  font-size: 13px;
+}
+
+.settings-form input[disabled] {
+  background: #f7f7f7;
+  color: #777;
+  cursor: not-allowed;
+}
+
+#set-error-report {
+  min-height: 70px;
+}
+
+#settings-hint {
+  margin-top: 10px;
+}
+
+/* Responsive settings grid */
+@media (max-width: 768px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Utility classes */
 .hidden {
   display: none;
 }
 
-
+/* لكل صفحة من الصفحات الداخلية (home/messages/tasks/settings) */
+.page-view {
+  /* ما في شي خاص هون، الـ hidden هو اللي يتحكم */
+}
