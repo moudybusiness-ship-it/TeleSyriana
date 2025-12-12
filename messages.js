@@ -87,25 +87,53 @@ function ensureTopLoader(listEl) {
   return loader;
 }
 
+function getInitials(name = "") {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map(p => p[0]?.toUpperCase() || "").join("") || "U";
+}
+
 function createMessageNode(m, showRole) {
   const wrapper = document.createElement("div");
   wrapper.className = "chat-message";
   if (currentUser && m.userId === currentUser.id) wrapper.classList.add("me");
 
-  const meta = document.createElement("div");
-  meta.className = "chat-message-meta";
-  meta.textContent = showRole
-    ? `${m.name} (${m.role}) • ${formatTime(m.ts)}`
-    : `${m.name} • ${formatTime(m.ts)}`;
+  // avatar
+  const avatar = document.createElement("div");
+  avatar.className = "msg-avatar";
+  avatar.textContent = getInitials(m.name || "User");
 
+  // body
+  const body = document.createElement("div");
+  body.className = "msg-body";
+
+  // meta row (name + role + time) جنب الصورة
+  const meta = document.createElement("div");
+  meta.className = "msg-meta";
+
+  const nameEl = document.createElement("span");
+  nameEl.className = "msg-name";
+  nameEl.textContent = showRole ? `${m.name} (${m.role})` : (m.name || "User");
+
+  const timeEl = document.createElement("span");
+  timeEl.textContent = `• ${formatTime(m.ts)}`;
+
+  meta.appendChild(nameEl);
+  meta.appendChild(timeEl);
+
+  // bubble text
   const text = document.createElement("div");
   text.className = "chat-message-text";
   text.textContent = m.text || "";
 
-  wrapper.appendChild(meta);
-  wrapper.appendChild(text);
+  body.appendChild(meta);
+  body.appendChild(text);
+
+  wrapper.appendChild(avatar);
+  wrapper.appendChild(body);
+
   return wrapper;
 }
+
 
 function renderFresh(listEl, msgs, showRole) {
   const loader = ensureTopLoader(listEl);
@@ -505,3 +533,4 @@ window.addEventListener("telesyriana:user-changed", () => {
     setInputEnabled(formEl, inputEl, false);
   }
 });
+
