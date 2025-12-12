@@ -32,6 +32,24 @@ let state = null;
 let timerId = null;
 let supUnsub = null;
 
+function showLogin() {
+  document.getElementById("login-screen").classList.remove("hidden");
+  document.getElementById("dashboard-screen").classList.add("hidden");
+
+  // hide nav
+  const nav = document.getElementById("main-nav");
+  if (nav) nav.classList.add("hidden");
+}
+
+function showDashboard() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("dashboard-screen").classList.remove("hidden");
+  updateDashboardUI();
+
+  // show nav
+  const nav = document.getElementById("main-nav");
+  if (nav) nav.classList.remove("hidden");
+}
 // ---------- Helpers ----------
 
 function getTodayKey() {
@@ -614,3 +632,4 @@ function buildSupervisorTableFromFirestore(rows) {
   if (sumMeet) sumMeet.textContent = totals.meeting;
   if (sumUnavail) sumUnavail.textContent = totals.unavailable;
 }
+
