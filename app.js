@@ -34,7 +34,10 @@ let state = null;
 let timerId = null;
 let supUnsub = null;
 
-// -------------------------------- helpers --------------------------------
+// widgets timers
+let clockIntervalId = null;
+
+// ------------------------------ helpers ---------------------------------
 
 function getTodayKey() {
   const d = new Date();
@@ -59,91 +62,6 @@ function statusLabel(code) {
       return code;
   }
 }
-function pad2(n){ return String(n).padStart(2, "0"); }
-
-function renderClockWidget(){
-  const clockEl = document.getElementById("widget-clock");
-  const dayEl = document.getElementById("widget-day");
-  const dateEl = document.getElementById("widget-date");
-  if (!clockEl || !dayEl || !dateEl) return;
-
-  const now = new Date();
-  clockEl.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
-
-  dayEl.textContent = now.toLocaleDateString(undefined, { weekday:"long" });
-  dateEl.textContent = now.toLocaleDateString(undefined, { day:"2-digit", month:"short" });
-}
-
-function setRing(percent){
-  const p = Math.max(0, Math.min(100, Math.round(percent)));
-  const ring = document.getElementById("ring-progress");
-  const label = document.getElementById("ring-label");
-  if (!ring || !label) return;
-  ring.setAttribute("stroke-dasharray", `${p}, 100`);
-  label.textContent = `${p}%`;
-}
-
-/* Mini calendar */
-let calRef = new Date(); // month being displayed
-
-function monthTitle(d){
-  return d.toLocaleDateString(undefined, { month:"long", year:"numeric" });
-}
-
-function buildMiniCalendar(){
-  const titleEl = document.getElementById("cal-title");
-  const gridEl = document.getElementById("cal-grid");
-  if (!titleEl || !gridEl) return;
-
-  titleEl.textContent = monthTitle(calRef);
-  gridEl.innerHTML = "";
-
-  const year = calRef.getFullYear();
-  const month = calRef.getMonth();
-
-  // Monday-first calendar
-  const first = new Date(year, month, 1);
-  const startDay = (first.getDay() + 6) % 7; // 0=Mon ... 6=Sun
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  const prevDays = new Date(year, month, 0).getDate();
-
-  const today = new Date();
-  const isThisMonth = today.getFullYear() === year && today.getMonth() === month;
-
-  // 42 cells (6 weeks)
-  for (let i = 0; i < 42; i++){
-    const cell = document.createElement("div");
-    cell.className = "mini-day";
-
-    const dayNum = i - startDay + 1;
-
-    if (dayNum <= 0){
-      cell.textContent = String(prevDays + dayNum);
-      cell.classList.add("muted");
-    } else if (dayNum > daysInMonth){
-      cell.textContent = String(dayNum - daysInMonth);
-      cell.classList.add("muted");
-    } else {
-      cell.textContent = String(dayNum);
-
-      if (isThisMonth && dayNum === today.getDate()){
-        cell.classList.add("today");
-      }
-    }
-
-    gridEl.appendChild(cell);
-  }
-}
-
-function hookCalendarButtons(){
-  const prev = document.getElementById("cal-prev");
-  const next = document.getElementById("cal-next");
-  if (!prev || !next) return;
-
-  prev.onclick = () => { calRef = new Date(calRef.getFullYear(), calRef.getMonth()-1, 1); buildMiniCalendar(); };
-  next.onclick = () => { calRef = new Date(calRef.getFullYear(), calRef.getMonth()+1, 1); buildMiniCalendar(); };
-}
 
 /**
  * ✅ Minutes -> "xx min" OR "1 hr" OR "2 hrs 13 min"
@@ -167,40 +85,140 @@ function formatDuration(mins) {
   return `${hrLabel} ${r} min`;
 }
 
-function recomputeLiveUsage(now) {
-  if (!state) {
-    return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
-  }
-function pad2(n){ return String(n).padStart(2, "0"); }
+// --------------------------- Widgets (Clock/Date) ------------------------
 
-function renderClockAndDate(){
-  const dateEl = document.getElementById("today-date");
-  const dayEl  = document.getElementById("today-day");
-  const clockEl = document.getElementById("live-clock");
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
 
-  if (!dateEl || !dayEl || !clockEl) return;
+/**
+ * Expects these IDs in HTML (if not found, it safely does nothing):
+ * - #widget-clock  (HH:MM)
+ * - #widget-day    (Thursday)
+ * - #widget-date   (12 Dec 2025)
+ */
+function renderClockWidget() {
+  const clockEl = document.getElementById("widget-clock");
+  const dayEl = document.getElementById("widget-day");
+  const dateEl = document.getElementById("widget-date");
+  if (!clockEl || !dayEl || !dateEl) return;
 
   const now = new Date();
-
-  // Example: 12 Dec 2025
-  const dateText = now.toLocaleDateString(undefined, {
+  clockEl.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  dayEl.textContent = now.toLocaleDateString(undefined, { weekday: "long" });
+  dateEl.textContent = now.toLocaleDateString(undefined, {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
-
-  // Example: Thursday
-  const dayText = now.toLocaleDateString(undefined, { weekday: "long" });
-
-  // Example: 16:34
-  const timeText = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
-
-  dateEl.textContent = dateText;
-  dayEl.textContent = dayText;
-  clockEl.textContent = timeText;
 }
 
-  const elapsedMin = (now - state.lastStatusChange) / 60000;
+// --------------------------- Widgets (Break Ring) ------------------------
+
+/**
+ * Expects:
+ * - #ring-progress  (SVG circle with stroke-dasharray support)
+ * - #ring-label     (text like "70%")
+ *
+ * If not present, it safely does nothing.
+ */
+function setRing(percent) {
+  const p = Math.max(0, Math.min(100, Math.round(percent)));
+  const ring = document.getElementById("ring-progress");
+  const label = document.getElementById("ring-label");
+  if (!ring || !label) return;
+
+  ring.setAttribute("stroke-dasharray", `${p}, 100`);
+  label.textContent = `${p}%`;
+}
+
+// --------------------------- Widgets (Mini Calendar) ---------------------
+
+/**
+ * Expects:
+ * - #cal-title
+ * - #cal-grid
+ * - #cal-prev
+ * - #cal-next
+ * And the CSS for .mini-day, .muted, .today
+ *
+ * If not present, it safely does nothing.
+ */
+let calRef = new Date();
+
+function monthTitle(d) {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function buildMiniCalendar() {
+  const titleEl = document.getElementById("cal-title");
+  const gridEl = document.getElementById("cal-grid");
+  if (!titleEl || !gridEl) return;
+
+  titleEl.textContent = monthTitle(calRef);
+  gridEl.innerHTML = "";
+
+  const year = calRef.getFullYear();
+  const month = calRef.getMonth();
+
+  // Monday-first calendar
+  const first = new Date(year, month, 1);
+  const startDay = (first.getDay() + 6) % 7; // 0=Mon ... 6=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const prevDays = new Date(year, month, 0).getDate();
+
+  const today = new Date();
+  const isThisMonth = today.getFullYear() === year && today.getMonth() === month;
+
+  // 42 cells (6 weeks)
+  for (let i = 0; i < 42; i++) {
+    const cell = document.createElement("div");
+    cell.className = "mini-day";
+
+    const dayNum = i - startDay + 1;
+
+    if (dayNum <= 0) {
+      cell.textContent = String(prevDays + dayNum);
+      cell.classList.add("muted");
+    } else if (dayNum > daysInMonth) {
+      cell.textContent = String(dayNum - daysInMonth);
+      cell.classList.add("muted");
+    } else {
+      cell.textContent = String(dayNum);
+
+      if (isThisMonth && dayNum === today.getDate()) {
+        cell.classList.add("today");
+      }
+    }
+
+    gridEl.appendChild(cell);
+  }
+}
+
+function hookCalendarButtons() {
+  const prev = document.getElementById("cal-prev");
+  const next = document.getElementById("cal-next");
+  if (!prev || !next) return;
+
+  prev.onclick = () => {
+    calRef = new Date(calRef.getFullYear(), calRef.getMonth() - 1, 1);
+    buildMiniCalendar();
+  };
+
+  next.onclick = () => {
+    calRef = new Date(calRef.getFullYear(), calRef.getMonth() + 1, 1);
+    buildMiniCalendar();
+  };
+}
+
+// --------------------------- Live usage math ----------------------------
+
+function recomputeLiveUsage(nowMs) {
+  if (!state) {
+    return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
+  }
+
+  const elapsedMin = (nowMs - state.lastStatusChange) / 60000;
 
   let op = state.operationMinutes || 0;
   let br = state.breakUsedMinutes || 0;
@@ -231,10 +249,10 @@ function renderClockAndDate(){
   return { breakUsed: br, operation: op, meeting: meet, handling: hand, unavailable: unav };
 }
 
-function applyElapsedToState(now) {
+function applyElapsedToState(nowMs) {
   if (!state) return;
 
-  const elapsedMin = (now - state.lastStatusChange) / 60000;
+  const elapsedMin = (nowMs - state.lastStatusChange) / 60000;
   if (elapsedMin <= 0) return;
 
   switch (state.status) {
@@ -255,7 +273,7 @@ function applyElapsedToState(now) {
       break;
   }
 
-  state.lastStatusChange = now;
+  state.lastStatusChange = nowMs;
 }
 
 // --------------------------- Firestore sync -----------------------------
@@ -317,7 +335,7 @@ function loadStateForToday(userId) {
   return null;
 }
 
-// --------------------------- UI init -----------------------------------
+// --------------------------- UI init ------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
   const navButtons = document.querySelectorAll(".nav-link[data-page]");
@@ -326,10 +344,10 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", () => switchPage(btn.dataset.page));
   });
 
-  document.getElementById("login-form").addEventListener("submit", handleLogin);
-  document.getElementById("logout-btn").addEventListener("click", handleLogout);
-  document.getElementById("status-select").addEventListener("change", handleStatusChange);
-  document.getElementById("settings-form").addEventListener("submit", handleSettingsSave);
+  document.getElementById("login-form")?.addEventListener("submit", handleLogin);
+  document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
+  document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
+  document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
 
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
@@ -348,16 +366,16 @@ document.addEventListener("DOMContentLoaded", () => {
 // -------------------------- Pages switching -----------------------------
 
 function switchPage(pageId) {
-  // أخفي كل الصفحات
+  // hide all pages
   document.querySelectorAll(".page-section").forEach((pg) => pg.classList.add("hidden"));
-  document.getElementById(`page-${pageId}`).classList.remove("hidden");
+  document.getElementById(`page-${pageId}`)?.classList.remove("hidden");
 
-  // فعل زر الـ nav
+  // activate nav
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.page === pageId);
   });
 
-  // تحكم بأيقونة الشات العائم
+  // floating chat toggle
   const floatToggle = document.getElementById("float-chat-toggle");
   if (!floatToggle) return;
 
@@ -382,19 +400,13 @@ function handleLogin(e) {
   currentUser = { id, name: USERS[id].name, role: USERS[id].role };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
-  // ✅ خلي messages.js يعرف إنو في user جديد (بدون Refresh)
+  // let messages.js know user changed
   window.dispatchEvent(new Event("telesyriana:user-changed"));
 
-  document.getElementById("login-error").classList.add("hidden");
+  document.getElementById("login-error")?.classList.add("hidden");
 
   initStateForUser();
   showDashboard();
-
-  renderClockWidget();
-buildMiniCalendar();
-hookCalendarButtons();
-setInterval(renderClockWidget, 1000);
-
 }
 
 async function handleLogout() {
@@ -409,11 +421,17 @@ async function handleLogout() {
 
   localStorage.removeItem(USER_KEY);
 
-  // ✅ خلي messages.js يعرف إنو ما عاد في user
+  // let messages.js know user changed
   window.dispatchEvent(new Event("telesyriana:user-changed"));
 
   if (timerId) clearInterval(timerId);
+  timerId = null;
+
+  if (clockIntervalId) clearInterval(clockIntervalId);
+  clockIntervalId = null;
+
   if (supUnsub) supUnsub();
+  supUnsub = null;
 
   currentUser = null;
   state = null;
@@ -423,6 +441,7 @@ async function handleLogout() {
 
 function showError(msg) {
   const box = document.getElementById("login-error");
+  if (!box) return;
   box.textContent = msg;
   box.classList.remove("hidden");
 }
@@ -435,17 +454,17 @@ async function handleStatusChange(e) {
   const newStatus = e.target.value;
   const now = Date.now();
 
-  // لو خلص البريك
+  // break limit reached
   if (newStatus === "break" && state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01) {
     alert("Daily break limit (45 minutes) already reached.");
     e.target.value = state.status;
     return;
   }
 
-  // ثبّت الزمن على الحالة القديمة
+  // apply elapsed to old status
   applyElapsedToState(now);
 
-  // غيّر الحالة
+  // set new status
   state.status = newStatus;
   state.lastStatusChange = now;
   saveState();
@@ -465,7 +484,6 @@ async function initStateForUser() {
   if (local) {
     state = local;
     finishInit(now);
-
     return;
   }
 
@@ -508,12 +526,25 @@ async function initStateForUser() {
 
 function finishInit(now) {
   if (currentUser.role === "supervisor") subscribeSupervisorDashboard();
+
   loadUserProfile();
   startTimer();
-  syncStateToFirestore(recomputeLiveUsage(now));
+
+  const live = recomputeLiveUsage(now);
+
+  // ✅ update UI immediately
+  updateBreakUI(live.breakUsed);
+  updateStatusMinutesUI(live);
+
+  // ✅ widgets (safe if elements not found)
+  renderClockWidget();
+  buildMiniCalendar();
+  hookCalendarButtons();
+
+  syncStateToFirestore(live);
 }
 
-// ----------------------------- Timer -----------------------------------
+// ----------------------------- Timer ------------------------------------
 
 function startTimer() {
   if (timerId) clearInterval(timerId);
@@ -545,7 +576,7 @@ async function tick() {
   await syncStateToFirestore(live);
 }
 
-// ------------------------- Dashboard UI --------------------------------
+// ------------------------- Dashboard UI ---------------------------------
 
 function updateDashboardUI() {
   if (!currentUser || !state) return;
@@ -555,50 +586,59 @@ function updateDashboardUI() {
   const statusValue = document.getElementById("status-value");
   const statusSelect = document.getElementById("status-select");
 
-  welcomeTitle.textContent = `Welcome, ${currentUser.name}`;
-  welcomeSubtitle.textContent = `Logged in as ${currentUser.role.toUpperCase()} (CCMS: ${currentUser.id})`;
+  if (welcomeTitle) welcomeTitle.textContent = `Welcome, ${currentUser.name}`;
+  if (welcomeSubtitle) {
+    welcomeSubtitle.textContent = `Logged in as ${currentUser.role.toUpperCase()} (CCMS: ${currentUser.id})`;
+  }
 
-  statusValue.textContent = statusLabel(state.status);
-  statusValue.className = `status-value status-${state.status}`;
+  if (statusValue) {
+    statusValue.textContent = statusLabel(state.status);
+    statusValue.className = `status-value status-${state.status}`;
+  }
 
-  statusSelect.value = state.status;
+  if (statusSelect) statusSelect.value = state.status;
 
   const live = recomputeLiveUsage(Date.now());
   updateBreakUI(live.breakUsed);
   updateStatusMinutesUI(live);
 
-  document.getElementById("supervisor-panel").classList.toggle(
-    "hidden",
-    currentUser.role !== "supervisor"
-  );
+  const supPanel = document.getElementById("supervisor-panel");
+  if (supPanel) supPanel.classList.toggle("hidden", currentUser.role !== "supervisor");
 }
 
 function updateBreakUI(used) {
   const usedMin = Math.floor(used);
   const remaining = Math.max(0, BREAK_LIMIT_MIN - usedMin);
 
-  document.getElementById("break-used").textContent = usedMin;
-  document.getElementById("break-remaining").textContent = remaining;
+  const usedEl = document.getElementById("break-used");
+  const remEl = document.getElementById("break-remaining");
+  if (usedEl) usedEl.textContent = usedMin;
+  if (remEl) remEl.textContent = remaining;
 
-  // ✅ widget ring
+  // optional widget text: "0 / 45"
   const breakText = document.getElementById("break-text");
   if (breakText) breakText.textContent = `${usedMin} / ${BREAK_LIMIT_MIN}`;
 
+  // optional ring
   setRing((usedMin / BREAK_LIMIT_MIN) * 100);
 }
 
-
 function updateStatusMinutesUI(live) {
-  // ✅ NEW: show in hr/min format
-  document.getElementById("op-min").textContent = formatDuration(live.operation);
-  document.getElementById("meet-min").textContent = formatDuration(live.meeting);
-  document.getElementById("hand-min").textContent = formatDuration(live.handling);
+  // show hr/min format in main UI
+  const opEl = document.getElementById("op-min");
+  const meetEl = document.getElementById("meet-min");
+  const handEl = document.getElementById("hand-min");
+
+  if (opEl) opEl.textContent = formatDuration(live.operation);
+  if (meetEl) meetEl.textContent = formatDuration(live.meeting);
+  if (handEl) handEl.textContent = formatDuration(live.handling);
 }
 
 // -------------------------- Supervisor Table ----------------------------
 
 function buildSupervisorTableFromFirestore(rows) {
   const body = document.getElementById("sup-table-body");
+  if (!body) return;
   body.innerHTML = "";
 
   const totals = { in_operation: 0, break: 0, meeting: 0, handling: 0, unavailable: 0 };
@@ -613,7 +653,7 @@ function buildSupervisorTableFromFirestore(rows) {
       tr.innerHTML = `
         <td>${r.name}</td>
         <td>${r.userId}</td>
-        <td>${r.role.toUpperCase()}</td>
+        <td>${String(r.role || "").toUpperCase()}</td>
         <td><span class="sup-status-pill status-${status}">${statusLabel(status)}</span></td>
         <td>${formatDuration(r.operationMinutes || 0)}</td>
         <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
@@ -624,13 +664,18 @@ function buildSupervisorTableFromFirestore(rows) {
       body.appendChild(tr);
     });
 
-  document.getElementById("sum-op").textContent = totals.in_operation;
-  document.getElementById("sum-break").textContent = totals.break;
-  document.getElementById("sum-meet").textContent = totals.meeting;
-  document.getElementById("sum-unavail").textContent = totals.unavailable;
+  const sumOp = document.getElementById("sum-op");
+  const sumBreak = document.getElementById("sum-break");
+  const sumMeet = document.getElementById("sum-meet");
+  const sumUnavail = document.getElementById("sum-unavail");
+
+  if (sumOp) sumOp.textContent = totals.in_operation;
+  if (sumBreak) sumBreak.textContent = totals.break;
+  if (sumMeet) sumMeet.textContent = totals.meeting;
+  if (sumUnavail) sumUnavail.textContent = totals.unavailable;
 }
 
-// ----------------------------- Settings --------------------------------
+// ----------------------------- Settings ---------------------------------
 
 async function loadUserProfile() {
   if (!currentUser) return;
@@ -638,12 +683,15 @@ async function loadUserProfile() {
   const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
   const snap = await getDoc(ref);
 
-  document.getElementById("set-name").value = currentUser.name;
+  const nameEl = document.getElementById("set-name");
+  if (nameEl) nameEl.value = currentUser.name;
 
   if (snap.exists()) {
     const d = snap.data();
-    document.getElementById("set-birthday").value = d.birthday || "";
-    document.getElementById("set-notes").value = d.notes || "";
+    const bdayEl = document.getElementById("set-birthday");
+    const notesEl = document.getElementById("set-notes");
+    if (bdayEl) bdayEl.value = d.birthday || "";
+    if (notesEl) notesEl.value = d.notes || "";
   }
 }
 
@@ -651,8 +699,8 @@ async function handleSettingsSave(e) {
   e.preventDefault();
   if (!currentUser) return;
 
-  const birthday = document.getElementById("set-birthday").value;
-  const notes = document.getElementById("set-notes").value;
+  const birthday = document.getElementById("set-birthday")?.value || "";
+  const notes = document.getElementById("set-notes")?.value || "";
 
   const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
 
@@ -671,33 +719,38 @@ async function handleSettingsSave(e) {
   alert("Settings saved successfully.");
 }
 
-// --------------------------- View switching ----------------------------
+// --------------------------- View switching -----------------------------
 
 function showLogin() {
-  document.getElementById("dashboard-screen").classList.add("hidden");
-  document.getElementById("login-screen").classList.remove("hidden");
-  document.getElementById("main-nav").classList.add("hidden");
+  document.getElementById("dashboard-screen")?.classList.add("hidden");
+  document.getElementById("login-screen")?.classList.remove("hidden");
+  document.getElementById("main-nav")?.classList.add("hidden");
 
   const floatToggle = document.getElementById("float-chat-toggle");
   if (floatToggle) floatToggle.classList.add("hidden");
+
+  // stop widgets interval
+  if (clockIntervalId) clearInterval(clockIntervalId);
+  clockIntervalId = null;
 }
 
 function showDashboard() {
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("dashboard-screen").classList.remove("hidden");
-  document.getElementById("main-nav").classList.remove("hidden");
+  document.getElementById("login-screen")?.classList.add("hidden");
+  document.getElementById("dashboard-screen")?.classList.remove("hidden");
+  document.getElementById("main-nav")?.classList.remove("hidden");
 
   switchPage("home");
   updateDashboardUI();
 
-  // ✅ widgets
+  // ✅ widgets (safe if HTML elements not found)
   renderClockWidget();
   buildMiniCalendar();
   hookCalendarButtons();
-  setInterval(renderClockWidget, 1000);
+
+  // start clock once
+  if (!clockIntervalId) {
+    clockIntervalId = setInterval(renderClockWidget, 1000);
+  }
 }
-
-
-
 
 
