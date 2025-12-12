@@ -204,11 +204,13 @@
 
               <div class="messages-sidebar-header small">Direct messages</div>
 
-              <!-- ✅ DM buttons (status dot + avatar) -->
+              <!-- ✅ DM buttons (DOT ATTACHED TO AVATAR) -->
               <button class="chat-dm" data-dm="1001">
                 <div class="chat-row">
-                  <span class="status-dot" data-status-dot="1001"></span>
-                  <div class="chat-avatar role-agent" data-avatar="1001">A1</div>
+                  <div class="dm-avatar-wrap">
+                    <div class="chat-avatar role-agent" data-avatar="1001">A1</div>
+                    <span class="status-dot dot-offline" data-status-dot="1001"></span>
+                  </div>
                   <div class="chat-row-text">
                     <div class="chat-room-title" data-name="1001">Agent 01</div>
                     <div class="chat-room-sub" data-sub="1001">Direct chat</div>
@@ -218,8 +220,10 @@
 
               <button class="chat-dm" data-dm="1002">
                 <div class="chat-row">
-                  <span class="status-dot" data-status-dot="1002"></span>
-                  <div class="chat-avatar role-agent" data-avatar="1002">A2</div>
+                  <div class="dm-avatar-wrap">
+                    <div class="chat-avatar role-agent" data-avatar="1002">A2</div>
+                    <span class="status-dot dot-offline" data-status-dot="1002"></span>
+                  </div>
                   <div class="chat-row-text">
                     <div class="chat-room-title" data-name="1002">Agent 02</div>
                     <div class="chat-room-sub" data-sub="1002">Direct chat</div>
@@ -229,8 +233,10 @@
 
               <button class="chat-dm" data-dm="1003">
                 <div class="chat-row">
-                  <span class="status-dot" data-status-dot="1003"></span>
-                  <div class="chat-avatar role-agent" data-avatar="1003">A3</div>
+                  <div class="dm-avatar-wrap">
+                    <div class="chat-avatar role-agent" data-avatar="1003">A3</div>
+                    <span class="status-dot dot-offline" data-status-dot="1003"></span>
+                  </div>
                   <div class="chat-row-text">
                     <div class="chat-room-title" data-name="1003">Agent 03</div>
                     <div class="chat-room-sub" data-sub="1003">Direct chat</div>
@@ -240,8 +246,10 @@
 
               <button class="chat-dm" data-dm="2001">
                 <div class="chat-row">
-                  <span class="status-dot" data-status-dot="2001"></span>
-                  <div class="chat-avatar role-supervisor" data-avatar="2001">SD</div>
+                  <div class="dm-avatar-wrap">
+                    <div class="chat-avatar role-supervisor" data-avatar="2001">SD</div>
+                    <span class="status-dot dot-offline" data-status-dot="2001"></span>
+                  </div>
                   <div class="chat-row-text">
                     <div class="chat-room-title" data-name="2001">Supervisor Dema</div>
                     <div class="chat-room-sub" data-sub="2001">Direct chat</div>
@@ -251,8 +259,10 @@
 
               <button class="chat-dm" data-dm="2002">
                 <div class="chat-row">
-                  <span class="status-dot" data-status-dot="2002"></span>
-                  <div class="chat-avatar role-supervisor" data-avatar="2002">SM</div>
+                  <div class="dm-avatar-wrap">
+                    <div class="chat-avatar role-supervisor" data-avatar="2002">SM</div>
+                    <span class="status-dot dot-offline" data-status-dot="2002"></span>
+                  </div>
                   <div class="chat-row-text">
                     <div class="chat-room-title" data-name="2002">Supervisor Moustafa</div>
                     <div class="chat-room-sub" data-sub="2002">Direct chat</div>
@@ -323,7 +333,7 @@
     </main>
   </div>
 
-  <!-- ✅ FLOATING CHAT BUBBLE (ONE ONLY) -->
+  <!-- ✅ FLOATING CHAT BUBBLE -->
   <button id="float-chat-toggle" class="floating-chat-toggle hidden">💬</button>
 
   <div id="float-chat-panel" class="floating-chat-panel hidden">
@@ -348,3 +358,5 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
+
