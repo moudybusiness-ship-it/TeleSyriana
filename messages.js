@@ -1,8 +1,9 @@
-// messages.js – TeleSyriana chat UI (Firestore realtime)
+// messages.js – TeleSyriana chat UI (Firestore realtime, no composite index)
 // - Rooms: general + supervisors
+// - Direct profiles لسا ديكور، ما في private chat حالياً
 // - Hide supervisors room for non-supervisors
-// - Uses currentUser from localStorage (same key as app.js)
-// - Realtime sync عبر Firestore + floating mini chat
+// - Uses currentUser from localStorage
+// - Realtime sync + floating mini chat
 
 import { db, fs } from "./firebase.js";
 
@@ -13,7 +14,6 @@ const {
   getDoc,
   query,
   where,
-  orderBy,
   onSnapshot,
   serverTimestamp,
 } = fs;
@@ -25,7 +25,7 @@ let currentUser = null;
 let currentRoom = "general";
 let unsubscribeChat = null;
 
-// نخزّن آخر رسائل معمول لها render بالذاكرة بس (للسكرول وغيره)
+// نخزّن آخر رسائل معمول لها render بالذاكرة بس
 let lastMessagesForRoom = {
   general: [],
   supervisors: [],
@@ -71,22 +71,25 @@ document.addEventListener("DOMContentLoaded", () => {
     },
   };
 
-  // لو في مستخدم محفوظ من قبل (auto-login) فعّل الاشتراك فوراً
+  // لو في مستخدم محفوظ من قبل
   if (currentUser) {
     subscribeToRoom(currentRoom, {
+      ROOM_META,
+      roomButtons,
       roomNameEl,
       roomDescEl,
       listEl,
       floatList,
-      ROOM_META,
     });
+
+    // أظهر زر البالونة
+    if (floatToggle) floatToggle.classList.remove("hidden");
   } else {
-    // ما في مستخدم → نعطّل الـ form بس (احتياط)
     if (formEl) formEl.classList.add("hidden");
     if (floatToggle) floatToggle.classList.add("hidden");
   }
 
-  // تبديل الغرف من القائمة الجانبية
+  // تبديل الغرف
   roomButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       if (!ensureUser()) return;
@@ -102,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // إرسال رسالة من الشات الرئيسي
+  // إرسال من الشات الرئيسي
   if (formEl && inputEl) {
     formEl.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -113,7 +116,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       await sendMessage(currentRoom, text);
       inputEl.value = "";
-      // ما في داعي نعمل render يدوي، onSnapshot رح يحدّث لوحده
     });
   }
 
@@ -124,8 +126,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       floatPanel.classList.toggle("hidden");
 
-      // أول ما يفتح، نتأكد المشتركين بالغرفة العامة
       if (!floatPanel.classList.contains("hidden")) {
+        // نتأكد مشتركين بالـ general
         subscribeToRoom("general", {
           ROOM_META,
           roomButtons,
@@ -134,7 +136,6 @@ document.addEventListener("DOMContentLoaded", () => {
           listEl,
           floatList,
         });
-        // عرض آخر رسائل محفوظة
         renderFloatingMessages(floatList, lastMessagesForRoom.general);
       }
     });
@@ -146,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // إرسال رسالة من الشات العائم (دائماً general)
+  // إرسال من الشات العائم (دائماً general)
   if (floatForm && floatInput) {
     floatForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -181,9 +182,7 @@ function loadUserFromStorage() {
 }
 
 function ensureUser() {
-  if (!currentUser) {
-    loadUserFromStorage();
-  }
+  if (!currentUser) loadUserFromStorage();
   if (!currentUser) {
     alert("Please login first to use chat.");
     return false;
@@ -197,31 +196,25 @@ function switchRoom(room, ctx) {
 
   applyRoomMeta(room, ctx.ROOM_META, ctx.roomNameEl, ctx.roomDescEl);
   setActiveRoomButton(room, ctx.roomButtons);
-
   subscribeToRoom(room, ctx);
 }
 
-// اشتراك Firestore بالغرفة الحالية
+// اشتراك Firestore بالغرفة
 async function subscribeToRoom(
   room,
   { ROOM_META, roomButtons, roomNameEl, roomDescEl, listEl, floatList }
 ) {
   if (!ensureUser()) return;
 
-  // أوقف الاشتراك القديم
   if (unsubscribeChat) {
     unsubscribeChat();
     unsubscribeChat = null;
   }
 
   const colRef = collection(db, CHAT_COL);
-  const qRoom = query(
-    colRef,
-    where("room", "==", room),
-    orderBy("ts", "asc")
-  );
+  // بدون orderBy لحتى ما يطلب index مركّب
+  const qRoom = query(colRef, where("room", "==", room));
 
-  // تأمين رسالة system welcome لكل غرفة (doc ثابت ID)
   await ensureSystemWelcome(room);
 
   unsubscribeChat = onSnapshot(qRoom, (snapshot) => {
@@ -234,20 +227,24 @@ async function subscribeToRoom(
       });
     });
 
+    // نرتّب حسب ts بالـ JS
+    msgs.sort((a, b) => {
+      const ta = tsToMillis(a.ts);
+      const tb = tsToMillis(b.ts);
+      return ta - tb;
+    });
+
     lastMessagesForRoom[room] = msgs;
 
-    // إذا هاي الغرفة هي المفتوحة في الصفحة الرئيسية
     if (room === currentRoom) {
       renderMainMessages(listEl, msgs);
     }
 
-    // الشات العائم يقرأ دائماً general
     if (room === "general" && floatList) {
       renderFloatingMessages(floatList, msgs);
     }
   });
 
-  // حدّث الهيدر للغرفة
   applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl);
   setActiveRoomButton(room, roomButtons);
 }
@@ -281,8 +278,7 @@ function applyRoomMeta(room, ROOM_META, roomNameEl, roomDescEl) {
   const meta = ROOM_META[room] || {};
   if (roomNameEl) roomNameEl.textContent = meta.name || room;
   if (roomDescEl)
-    roomDescEl.textContent =
-      meta.desc || "Internal chat room.";
+    roomDescEl.textContent = meta.desc || "Internal chat room.";
 }
 
 function setActiveRoomButton(room, roomButtons) {
@@ -369,16 +365,23 @@ function renderFloatingMessages(floatList, msgs) {
   floatList.scrollTop = floatList.scrollHeight;
 }
 
-function formatTime(ts) {
-  if (!ts) return "";
-  let d;
-  // Firestore Timestamp
-  if (ts.toDate && typeof ts.toDate === "function") {
-    d = ts.toDate();
-  } else if (ts instanceof Date) {
-    d = ts;
-  } else {
-    d = new Date(ts);
+function tsToMillis(ts) {
+  if (!ts) return 0;
+  if (ts.toMillis && typeof ts.toMillis === "function") {
+    return ts.toMillis();
   }
+  if (ts.toDate && typeof ts.toDate === "function") {
+    return ts.toDate().getTime();
+  }
+  if (ts instanceof Date) {
+    return ts.getTime();
+  }
+  return new Date(ts).getTime();
+}
+
+function formatTime(ts) {
+  const ms = tsToMillis(ts);
+  if (!ms) return "";
+  const d = new Date(ms);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
