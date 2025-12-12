@@ -208,7 +208,7 @@ function subscribeFloatToGeneral(floatList) {
   const qGeneral = query(
     collection(db, MESSAGES_COL),
     where("room", "==", "general"),
-    orderBy("ts", "desc"),
+    orderBy("ts", "acs"),
     limit(50)
   );
 
@@ -296,6 +296,7 @@ function formatTime(ts) {
   const dateObj = ts.toDate ? ts.toDate() : new Date(ts);
   return dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
 
 
 
