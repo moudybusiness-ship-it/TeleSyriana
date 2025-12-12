@@ -120,8 +120,10 @@ body {
   display: block;
 }
 
+/* Login card on the right */
 .login-card {
-  flex: 1.1;
+  flex: 1;
+  max-width: 420px;
 }
 
 .login-event-panel {
@@ -487,4 +489,5 @@ input:focus {
 .hidden {
   display: none;
 }
+
 
