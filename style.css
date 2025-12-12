@@ -1,37 +1,80 @@
-/* Reset & base */
+/* =========================
+   Reset & base
+========================= */
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
 
+:root {
+  --pink: #ff2c8b;
+  --pink2: #ff5db6;
+  --bg1: #ff2c8b;
+  --bg2: #ff8bd3;
+
+  --card: #ffffff;
+  --muted: #777;
+  --text: #222;
+
+  --line: #f0f0f0;
+  --soft: #fafafa;
+
+  --msg-in: #f1f1f1;
+  --msg-me: #ffe2f1; /* قريب من الخلفية الزهرية */
+  --shadow: 0 16px 30px rgba(0, 0, 0, 0.18);
+}
+
 body {
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  background: linear-gradient(135deg, #ff2c8b, #ff8bd3);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(135deg, var(--bg1), var(--bg2));
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #222;
+  color: var(--text);
+
+  /* مهم للـ header الثابت */
+  display: block;
 }
 
-/* Layout wrapper */
+/* Utility */
+.hidden { display: none !important; }
+
+/* =========================
+   Layout wrapper
+========================= */
 .app-wrapper {
   width: 100%;
   max-width: 1100px;
+  margin: 0 auto;
   padding: 16px;
+
+  /* مساحة للـ header الثابت */
+  padding-top: 92px;
 }
 
-/* Header */
+/* =========================
+   Header (Fixed white box)
+========================= */
 .app-header {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, calc(100% - 32px));
+  z-index: 999;
+
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 18px;
+  box-shadow: 0 16px 30px rgba(0,0,0,0.15);
+  backdrop-filter: blur(10px);
+
+  padding: 12px 14px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #fff;
-  margin-bottom: 16px;
 }
 
 /* Nav (left – only after login) */
@@ -39,27 +82,28 @@ body {
   display: flex;
   gap: 10px;
   font-size: 13px;
+  align-items: center;
 }
 
 .nav-link {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 44, 139, 0.12);
   border: none;
   border-radius: 999px;
-  padding: 6px 12px;
-  color: #fff;
+  padding: 7px 12px;
+  color: #7a0f42;
   font-size: 12px;
   cursor: pointer;
-  backdrop-filter: blur(4px);
   transition: background 0.15s ease, transform 0.05s ease;
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 44, 139, 0.18);
 }
 
 .nav-link.active {
   background: #ffffff;
-  color: #ff2c8b;
+  color: var(--pink);
+  box-shadow: 0 8px 18px rgba(255,44,139,0.20);
   transform: translateY(-1px);
 }
 
@@ -69,26 +113,36 @@ body {
 }
 
 .logo {
-  font-size: 30px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.04em;
+  color: #2a2a2a;
 }
 
 .logo span {
   font-weight: 500;
+  color: var(--pink);
 }
 
 .tagline {
-  font-size: 13px;
-  opacity: 0.9;
+  font-size: 12px;
+  opacity: 0.85;
+  color: #555;
 }
 
-/* Card */
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* =========================
+   Card
+========================= */
 .card {
-  background: #ffffff;
+  background: var(--card);
   border-radius: 18px;
   padding: 24px 22px 20px;
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow);
 }
 
 .card h1 {
@@ -102,12 +156,13 @@ body {
   color: #666;
 }
 
-/* خلي كروت الداشبورد كلها ارتفاع مقبول */
-#dashboard-screen .card {
-  min-height: 340px;
+/* =========================
+   LOGIN LAYOUT
+========================= */
+#login-screen {
+  margin-top: 18px;
 }
 
-/* LOGIN LAYOUT */
 .login-layout {
   display: flex;
   width: 100%;
@@ -138,104 +193,9 @@ body {
   max-width: 420px;
 }
 
-/* Optional event panel (not used now) */
-.login-event-panel {
-  flex: 1;
-  display: flex;
-  align-items: stretch;
-}
-
-.event-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.event-image-placeholder {
-  flex: 1;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #ff2c8b22, #ffffff);
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: #999;
-}
-
-.event-text h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-}
-
-.event-text p {
-  margin: 0;
-  font-size: 13px;
-  color: #555;
-}
-
-/* DASHBOARD LAYOUT: two cards side by side */
-.dashboard-layout {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.dashboard-main {
-  flex: 1.4;
-}
-
-.dashboard-side {
-  flex: 1;
-}
-
-.dashboard-side h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-}
-
-.side-list {
-  margin: 0 0 10px;
-  padding-left: 18px;
-  font-size: 13px;
-  color: #555;
-}
-
-.side-footer-note {
-  font-size: 12px;
-  color: #777;
-  border-top: 1px dashed #eee;
-  padding-top: 8px;
-  margin-top: 6px;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .login-layout,
-  .dashboard-layout {
-    flex-direction: column;
-    max-width: 100%;
-  }
-
-  .app-header {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .header-right {
-    text-align: center;
-  }
-
-  .main-nav {
-    order: 2;
-  }
-
-  .login-banner {
-    max-height: 260px;
-  }
-}
-
-/* Forms */
+/* =========================
+   Forms
+========================= */
 label {
   display: block;
   font-size: 13px;
@@ -258,7 +218,7 @@ textarea {
 
 input:focus,
 textarea:focus {
-  border-color: #ff2c8b;
+  border-color: var(--pink);
   box-shadow: 0 0 0 2px rgba(255, 44, 139, 0.15);
 }
 
@@ -275,7 +235,7 @@ textarea:focus {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #ff2c8b, #ff5db6);
+  background: linear-gradient(135deg, var(--pink), var(--pink2));
   color: #fff;
 }
 
@@ -314,6 +274,42 @@ textarea:focus {
   border-radius: 4px;
 }
 
+/* =========================
+   Dashboard
+========================= */
+#dashboard-screen .card {
+  min-height: 340px;
+}
+
+.dashboard-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.dashboard-main { flex: 1.4; }
+.dashboard-side { flex: 1; }
+
+.dashboard-side h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.side-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #555;
+}
+
+.side-footer-note {
+  font-size: 12px;
+  color: #777;
+  border-top: 1px dashed #eee;
+  padding-top: 8px;
+  margin-top: 6px;
+}
+
 /* Status box */
 .status-box {
   display: flex;
@@ -339,39 +335,14 @@ textarea:focus {
   display: inline-block;
 }
 
-/* Colors for each status */
-.status-value.status-in_operation {
-  background: #e4f8ea;
-  color: #1b7c3a;
-}
-
+.status-value.status-in_operation { background: #e4f8ea; color: #1b7c3a; }
 .status-value.status-break,
-.status-value.status-meeting {
-  background: #fff3cd;
-  color: #856404;
-}
+.status-value.status-meeting { background: #fff3cd; color: #856404; }
+.status-value.status-handling { background: #f5cdff; color: #85047f; }
+.status-value.status-unavailable { background: #e2e3e5; color: #505050; }
 
-.status-value.status-handling {
-  background: #f5cdff;
-  color: #85047f;
-}
-
-.status-value.status-unavailable {
-  background: #e2e3e5;
-  color: #505050;
-}
-
-/* Status controls */
-.status-controls {
-  margin-bottom: 12px;
-  font-size: 13px;
-}
-
-.status-controls label {
-  display: block;
-  font-weight: 500;
-  margin-bottom: 4px;
-}
+.status-controls { margin-bottom: 12px; font-size: 13px; }
+.status-controls label { display: block; font-weight: 500; margin-bottom: 4px; }
 
 #status-select {
   width: 100%;
@@ -381,9 +352,8 @@ textarea:focus {
   font-size: 14px;
   outline: none;
 }
-
 #status-select:focus {
-  border-color: #ff2c8b;
+  border-color: var(--pink);
   box-shadow: 0 0 0 2px rgba(255, 44, 139, 0.15);
 }
 
@@ -417,12 +387,6 @@ textarea:focus {
   gap: 4px;
 }
 
-/* Actions */
-.actions {
-  display: flex;
-  gap: 10px;
-}
-
 /* Supervisor panel */
 .sup-panel {
   margin-top: 22px;
@@ -430,16 +394,8 @@ textarea:focus {
   padding-top: 14px;
 }
 
-.sup-panel h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-}
-
-.sup-note {
-  margin: 0 0 10px;
-  font-size: 12px;
-  color: #777;
-}
+.sup-panel h2 { margin: 0 0 6px; font-size: 18px; }
+.sup-note { margin: 0 0 10px; font-size: 12px; color: #777; }
 
 .sup-summary {
   display: flex;
@@ -448,10 +404,6 @@ textarea:focus {
   font-size: 11px;
   color: #555;
   margin-bottom: 8px;
-}
-
-.sup-summary span strong {
-  font-weight: 700;
 }
 
 .sup-table-wrapper {
@@ -467,20 +419,14 @@ textarea:focus {
   font-size: 12px;
 }
 
-.sup-table thead {
-  background: #fafafa;
-}
-
+.sup-table thead { background: #fafafa; }
 .sup-table th,
 .sup-table td {
   padding: 6px 8px;
   border-bottom: 1px solid #f1f1f1;
   text-align: left;
 }
-
-.sup-table tr:last-child td {
-  border-bottom: none;
-}
+.sup-table tr:last-child td { border-bottom: none; }
 
 .sup-status-pill {
   display: inline-block;
@@ -489,238 +435,99 @@ textarea:focus {
   font-size: 11px;
   font-weight: 600;
 }
-
-.sup-status-pill.status-in_operation {
-  background: #e4f8ea;
-  color: #1b7c3a;
-}
-
+.sup-status-pill.status-in_operation { background: #e4f8ea; color: #1b7c3a; }
 .sup-status-pill.status-break,
-.sup-status-pill.status-meeting {
-  background: #fff3cd;
-  color: #856404;
-}
+.sup-status-pill.status-meeting { background: #fff3cd; color: #856404; }
+.sup-status-pill.status-handling { background: #f5cdff; color: #85047f; }
+.sup-status-pill.status-unavailable { background: #e2e3e5; color: #505050; }
 
-.sup-status-pill.status-handling {
-  background: #f5cdff;
-  color: #85047f;
-}
+/* =========================
+   Messages / Chat page
+========================= */
+.page-section { margin-top: 10px; }
+.messages-card { padding: 0; }
 
-.sup-status-pill.status-unavailable {
-  background: #e2e3e5;
-  color: #505050;
-}
-
-/* ========== Messages / Chat page ========== */
-.status-dot{
-  width:10px;height:10px;border-radius:50%;
-  display:inline-block;
-  margin-right:8px;
-  flex:0 0 auto;
-}
-.dot-online{ background:#26d07c; }
-.dot-warn{ background:#ff9f1a; }
-.dot-offline{ background:#9aa0a6; }
-
-.chat-row{ display:flex; align-items:center; gap:10px; }
-.chat-row-text{ display:flex; flex-direction:column; }
-.chat-empty{ padding:10px 2px; font-size:13px; color:#777; }
-
-.chat-dm{
-  width:100%;
-  text-align:left;
-  border:0;
-  background:transparent;
-  padding:10px;
-  border-radius:12px;
-  cursor:pointer;
-}
-.chat-dm:hover{ background: rgba(255,255,255,0.06); }
-.chat-dm.active{ background: rgba(255,255,255,0.10); }
-
-/* ===== CHAT PAGE FIX ===== */
-#page-messages {
-  height: calc(100vh - 120px);
-  display: flex;
-  flex-direction: column;
-}
-
-#chat-message-list {
-  height: calc(100vh - 260px);
-  overflow-y: auto;
-  padding: 16px;
-}
-
-#chat-form {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  border-top: 1px solid #ddd;
-}
-
-.chat-message {
-  border-radius: 12px;
-  padding: 10px 14px;
-  margin-bottom: 10px;
-  max-width: 70%;
-}
-.chat-message.me {
-  margin-left: auto;
-  background: #fff;
-}
-.chat-message-meta {
-  font-size: 12px;
-  opacity: 0.7;
-  margin-bottom: 4px;
-}
-
-/* floating scroll */
-#float-chat-messages { max-height: 300px; overflow-y: auto; }
-
-/* badge */
-#float-chat-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: #ff2d55;
-  color: #fff;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 999px;
-}
-
-/* typing */
-#chat-typing { font-size: 12px; opacity: .7; padding: 6px 12px; }
-
-/* scroll down button */
-#chat-scroll-down {
-  position: absolute;
-  right: 18px;
-  bottom: 80px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  background: rgba(0,0,0,.55);
-  color: #fff;
-  cursor: pointer;
-}
-.hidden { display:none !important; }
-
-/* ✅ خلي صندوق الرسائل يعمل scrolling بدل ما يكبر الصفحة */
-#chat-message-list {
-  height: 52vh;           /* عدّلها إذا بدك أكبر/أصغر */
-  overflow-y: auto;
-  padding: 12px;
-}
-
-/* ✅ الشات العائم كمان scrolling */
-#float-chat-messages {
-  max-height: 260px;      /* عدّلها حسب شكل البالونة */
-  overflow-y: auto;
-  padding: 10px;
-}
-
-/* (اختياري) تحسين تمرير على الموبايل */
-#chat-message-list,
-#float-chat-messages {
-  -webkit-overflow-scrolling: touch;
-}
-
-.page-section {
-  margin-top: 10px;
-}
-
-/* الكرت العام لصفحة المسجات */
-.messages-card {
-  padding: 0;
-}
-
-/* تقسيمة مسنجر: يسار Rooms – يمين الشات */
 .messages-layout {
   display: flex;
-  min-height: 360px;
+  min-height: 520px;
 }
 
-/* ----- Sidebar (left) ----- */
-
+/* Sidebar */
 .messages-sidebar {
-  width: 260px;
-  border-right: 1px solid #f0f0f0;
+  width: 270px;
+  border-right: 1px solid var(--line);
   padding: 16px 14px;
-  background: #fafafa;
+  background: var(--soft);
   border-top-left-radius: 18px;
   border-bottom-left-radius: 18px;
 }
 
 .messages-sidebar-header {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #999;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
-.messages-sidebar-header.small {
-  margin-top: 18px;
-}
+.messages-sidebar-header.small { margin-top: 18px; }
 
-/* أزرار الغرف */
-.chat-room {
+.chat-room,
+.chat-dm {
   width: 100%;
   text-align: left;
   border: none;
   background: transparent;
-  border-radius: 10px;
-  padding: 8px 10px;
+  border-radius: 12px;
+  padding: 10px 10px;
   margin-bottom: 6px;
   cursor: pointer;
   transition: background 0.12s ease;
 }
 
-.chat-room:hover {
-  background: #f0f0f0;
+.chat-room:hover,
+.chat-dm:hover { background: #f0f0f0; }
+
+.chat-room.active,
+.chat-dm.active { background: #ffe5f3; }
+
+.chat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.chat-room.active {
-  background: #ffe5f3;
+.chat-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .chat-room-title {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .chat-room-sub {
   font-size: 11px;
-  color: #777;
+  color: var(--muted);
 }
 
-/* badge للمشرفين */
+/* Badge */
 .room-badge {
   display: inline-block;
   margin-left: 6px;
   padding: 2px 6px;
   border-radius: 999px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   background: #fff3cd;
   color: #856404;
 }
 
-/* profiles تحت */
-.chat-profile {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 4px;
-  border-radius: 8px;
-  cursor: default;
-}
-
-.chat-profile:hover {
-  background: #f0f0f0;
-}
-
+/* Avatar */
 .chat-avatar {
   width: 32px;
   height: 32px;
@@ -729,46 +536,30 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
   color: #fff;
+  flex: 0 0 auto;
 }
 
-.chat-avatar.small {
-  width: 26px;
-  height: 26px;
-  font-size: 11px;
+.chat-avatar.role-agent { background: #4c9fff; }
+.chat-avatar.role-supervisor { background: var(--pink); }
+.chat-avatar.role-ai { background: #6b4cff; }
+.chat-avatar.role-room { background: #8c8c8c; }
+
+/* Status dot (sidebar) */
+.status-dot{
+  width:10px; height:10px;
+  border-radius:50%;
+  display:inline-block;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
 }
 
-.chat-avatar.role-agent {
-  background: #4c9fff;
-}
+.dot-online { background:#26d07c; }
+.dot-warn { background:#ff9f1a; }
+.dot-offline { background:#9aa0a6; }
 
-.chat-avatar.role-supervisor {
-  background: #ff2c8b;
-}
-
-/* ChatGPT / AI avatar */
-.chat-avatar.role-ai {
-  background: #6b4cff;
-}
-
-.chat-profile-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-profile-name {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.chat-profile-role {
-  font-size: 11px;
-  color: #777;
-}
-
-/* ----- Main chat area (right) ----- */
-
+/* Main chat area */
 .messages-main {
   flex: 1;
   display: flex;
@@ -776,61 +567,115 @@ textarea:focus {
   border-top-right-radius: 18px;
   border-bottom-right-radius: 18px;
   padding: 14px 16px 12px;
+  background: #fff;
 }
 
-/* Header فوق الشات */
+/* Chat header */
 .chat-header {
   border-bottom: 1px solid #f3f3f3;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
 }
 
-.chat-room-name {
-  font-size: 15px;
-  font-weight: 700;
+.chat-room-name { font-size: 15px; font-weight: 800; }
+.chat-room-desc { font-size: 11px; color: var(--muted); }
+
+.chat-empty {
+  padding: 10px 2px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
-.chat-room-desc {
-  font-size: 11px;
-  color: #777;
-}
-
-/* قائمة الرسائل */
+/* Messages list */
 .chat-message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 2px 6px 0;
+  padding: 6px 6px 6px 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* شكل فقاعة الرسالة */
+/* Message row */
 .chat-message {
-  max-width: 65%;
-  margin-bottom: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: 78%;
 }
 
-
-.chat-message-meta {
-  font-size: 10px;
-  color: #888;
-  margin-bottom: 2px;
+.chat-message.me {
+  margin-left: auto;
+  flex-direction: row-reverse; /* avatar يمين عندي */
 }
 
+/* Avatar inside messages */
+.msg-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 11px;
+  color: #fff;
+  background: #9aa0a6;
+  flex: 0 0 auto;
+}
+
+.chat-message.me .msg-avatar {
+  background: var(--pink);
+}
+
+.msg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #7a7a7a;
+  line-height: 1.1;
+}
+
+.msg-name {
+  font-weight: 800;
+  color: #555;
+}
+
+.chat-message.me .msg-name {
+  color: #7a0f42;
+}
+
+/* Bubble */
 .chat-message-text {
   padding: 10px 14px;
   border-radius: 14px;
-  background: #f1f1f1;
+  background: var(--msg-in);
+  color: #222;
+  word-wrap: break-word;
+  white-space: pre-wrap;
 }
 
-/* شريط الكتابة تحت */
+.chat-message.me .chat-message-text {
+  background: linear-gradient(135deg, var(--pink), var(--pink2));
+  color: #fff;
+}
+
+/* Input row */
 .chat-input-row {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
-  border-top: 1px solid #f0f0f0;
-  padding-top: 8px;
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
 }
 
 .chat-input {
@@ -838,57 +683,29 @@ textarea:focus {
   border-radius: 999px;
   border: 1px solid #d0d0d0;
   font-size: 13px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   outline: none;
 }
 
 .chat-input:focus {
-  border-color: #ff2c8b;
+  border-color: var(--pink);
   box-shadow: 0 0 0 2px rgba(255, 44, 139, 0.15);
 }
 
 .chat-send-btn {
   border-radius: 999px;
   border: none;
-  padding: 8px 16px;
+  padding: 10px 16px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 800;
   cursor: pointer;
-  background: linear-gradient(135deg, #ff2c8b, #ff5db6);
+  background: linear-gradient(135deg, var(--pink), var(--pink2));
   color: #fff;
 }
 
-/* موبايل: نخليهم تحت بعض */
-@media (max-width: 768px) {
-  .messages-layout {
-    flex-direction: column;
-  }
-
-  .messages-sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid #f0f0f0;
-    border-radius: 18px 18px 0 0;
-  }
-
-  .messages-main {
-    border-radius: 0 0 18px 18px;
-  }
-}
-
-/* ========== ChatGPT banner (احتياطي) ========== */
-.chat-ai-banner {
-  margin-bottom: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  border-radius: 10px;
-  background: #f7f3ff;
-  border-left: 3px solid #ff2c8b;
-  color: #555;
-}
-
-/* ========== Floating chat bubble & mini panel ========== */
-
+/* =========================
+   Floating chat
+========================= */
 .floating-chat-toggle {
   position: fixed;
   bottom: 18px;
@@ -899,7 +716,7 @@ textarea:focus {
   border: none;
   outline: none;
   cursor: pointer;
-  background: linear-gradient(135deg, #ff2c8b, #ff5db6);
+  background: linear-gradient(135deg, var(--pink), var(--pink2));
   color: #fff;
   font-size: 22px;
   display: flex;
@@ -909,13 +726,11 @@ textarea:focus {
   z-index: 1000;
   transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.15s ease;
 }
-
 .floating-chat-toggle:hover {
   transform: translateY(-1px);
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.3);
 }
 
-/* صندوق الشات الصغير */
 .floating-chat-panel {
   position: fixed;
   bottom: 80px;
@@ -931,21 +746,16 @@ textarea:focus {
   z-index: 1000;
 }
 
-/* هيدر الشات الصغير */
 .floating-chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: linear-gradient(135deg, #ff2c8b, #ff8bd3);
+  background: linear-gradient(135deg, var(--pink), var(--bg2));
   color: #fff;
 }
 
-.floating-chat-title {
-  font-size: 13px;
-  font-weight: 600;
-}
-
+.floating-chat-title { font-size: 13px; font-weight: 800; }
 .floating-chat-close {
   border: none;
   background: transparent;
@@ -955,7 +765,6 @@ textarea:focus {
   padding: 0 4px;
 }
 
-/* جسم الشات الصغير */
 .floating-chat-body {
   padding: 8px 10px;
   background: #fafafa;
@@ -963,7 +772,7 @@ textarea:focus {
 
 .floating-chat-room-name {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   margin-bottom: 2px;
 }
 
@@ -973,17 +782,16 @@ textarea:focus {
   margin-bottom: 6px;
 }
 
-/* رسائل داخل الشات الصغير */
 .floating-chat-messages {
   max-height: 220px;
   overflow-y: auto;
   padding-right: 4px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* شريط الإدخال في الشات الصغير */
 .floating-chat-input-row {
   display: flex;
   gap: 6px;
@@ -1002,7 +810,7 @@ textarea:focus {
 }
 
 .floating-chat-input-row input:focus {
-  border-color: #ff2c8b;
+  border-color: var(--pink);
   box-shadow: 0 0 0 2px rgba(255, 44, 139, 0.15);
 }
 
@@ -1011,78 +819,54 @@ textarea:focus {
   border: none;
   padding: 7px 12px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
   cursor: pointer;
-  background: #ff2c8b;
+  background: var(--pink);
   color: #fff;
 }
 
-/* موبايل: ضبط مكان البالونة */
+/* =========================
+   Responsive
+========================= */
 @media (max-width: 768px) {
-  .floating-chat-toggle {
-    bottom: 16px;
-    right: 12px;
+  .app-wrapper { padding-top: 120px; }
+
+  .app-header {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
   }
 
+  .header-right { text-align: center; }
+
+  .login-layout,
+  .dashboard-layout {
+    flex-direction: column;
+    max-width: 100%;
+  }
+
+  .login-banner { max-height: 260px; }
+
+  .messages-layout { flex-direction: column; }
+
+  .messages-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+  }
+
+  .messages-main {
+    border-radius: 0 0 18px 18px;
+  }
+
+  .floating-chat-toggle { bottom: 16px; right: 12px; }
   .floating-chat-panel {
     right: 10px;
     bottom: 76px;
     width: calc(100vw - 20px);
   }
 }
-
-/* ---------------- SETTINGS PAGE ---------------- */
-
-.settings-form {
-  margin-top: 12px;
-}
-
-.settings-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 18px;
-  margin-bottom: 12px;
-}
-
-.settings-form label {
-  font-size: 13px;
-}
-
-.settings-form input[disabled] {
-  background: #f7f7f7;
-  color: #777;
-  cursor: not-allowed;
-}
-
-#set-error-report {
-  min-height: 70px;
-}
-
-#settings-hint {
-  margin-top: 10px;
-}
-
-/* Responsive settings grid */
-@media (max-width: 768px) {
-  .settings-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Utility classes */
-.hidden {
-  display: none;
-}
-
-/* حد أدنى موحّد لارتفاع السكاشن الأساسية */
-.page-section > .card,
-.dashboard-main,
-.dashboard-side,
-.messages-card {
-  min-height: 260px;
-}
-
-
 
 
 
