@@ -13,24 +13,22 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  addDoc          // ⬅️ مهم جداً للرسائل
+  addDoc,            // 👈 مهم للشات
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Firebase config تبع مشروعك
 const firebaseConfig = {
   apiKey: "AIzaSyDSvgD5GEZRE_zBzspoPr3pHQW1XOZr6yQ",
   authDomain: "telesyriana-ccms.firebaseapp.com",
   projectId: "telesyriana-ccms",
   storageBucket: "telesyriana-ccms.appspot.com",
   messagingSenderId: "867008812270",
-  appId: "1:867008812270:web:b87edde8d675aa5e224fff"
+  appId: "1:867008812270:web:b87edde8d675aa5e224fff",
 };
 
-// Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// نصدّر كل الفنكشنز اللي محتاجينها في app.js و messages.js
+// نصدّر كل شيء نحتاجه
 export const fs = {
   doc,
   setDoc,
@@ -42,8 +40,7 @@ export const fs = {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  addDoc
+  addDoc,          // 👈 هون كمان
 };
-
 
 
