@@ -26,6 +26,9 @@ const USER_KEY = "telesyrianaUser";
 const STATE_KEY = "telesyrianaState";
 const BREAK_LIMIT_MIN = 45;
 
+// ✅ Work target (8 hours)
+const WORK_TARGET_MIN = 8 * 60;
+
 const AGENT_DAYS_COL = "agentDays";
 const USER_PROFILE_COL = "userProfiles";
 
@@ -65,12 +68,6 @@ function statusLabel(code) {
 
 /**
  * ✅ Minutes -> "xx min" OR "1 hr" OR "2 hrs 13 min"
- * Rules:
- *  - < 60: "59 min"
- *  - 60: "1 hr"
- *  - 61: "1 hr 1 min"
- *  - 120: "2 hrs"
- *  - 121: "2 hrs 1 min"
  */
 function formatDuration(mins) {
   const m = Math.max(0, Math.floor(Number(mins) || 0));
@@ -85,6 +82,15 @@ function formatDuration(mins) {
   return `${hrLabel} ${r} min`;
 }
 
+// ✅ Worked minutes = operation + meeting + handling + break (NO unavailable)
+function computeWorkedMinutes(live) {
+  const op = Number(live.operation) || 0;
+  const meet = Number(live.meeting) || 0;
+  const hand = Number(live.handling) || 0;
+  const br = Number(live.breakUsed) || 0;
+  return op + meet + hand + br;
+}
+
 // --------------------------- Widgets (Clock/Date) ------------------------
 
 function pad2(n) {
@@ -92,10 +98,10 @@ function pad2(n) {
 }
 
 /**
- * Expects these IDs in HTML (if not found, it safely does nothing):
- * - #widget-clock  (HH:MM)
- * - #widget-day    (Thursday)
- * - #widget-date   (12 Dec 2025)
+ * Expects IDs in HTML:
+ * - #widget-clock
+ * - #widget-day
+ * - #widget-date
  */
 function renderClockWidget() {
   const clockEl = document.getElementById("widget-clock");
@@ -117,10 +123,8 @@ function renderClockWidget() {
 
 /**
  * Expects:
- * - #ring-progress  (SVG circle with stroke-dasharray support)
- * - #ring-label     (text like "70%")
- *
- * If not present, it safely does nothing.
+ * - #ring-progress
+ * - #ring-label
  */
 function setRing(percent) {
   const p = Math.max(0, Math.min(100, Math.round(percent)));
@@ -132,6 +136,35 @@ function setRing(percent) {
   label.textContent = `${p}%`;
 }
 
+// --------------------------- Widgets (Work target box) -------------------
+
+/**
+ * Optional IDs (if you added the box in HTML):
+ * - #work-used
+ * - #work-remaining
+ * - #work-target
+ * - #work-percent
+ */
+function updateWorkUI(workedMin) {
+  const usedEl = document.getElementById("work-used");
+  const remEl = document.getElementById("work-remaining");
+  const targetEl = document.getElementById("work-target");
+  const pctEl = document.getElementById("work-percent");
+
+  // if box not in HTML, do nothing
+  if (!usedEl && !remEl && !targetEl && !pctEl) return;
+
+  const used = Math.max(0, Math.floor(workedMin));
+  const remaining = Math.max(0, WORK_TARGET_MIN - used);
+
+  if (usedEl) usedEl.textContent = formatDuration(used);
+  if (remEl) remEl.textContent = formatDuration(remaining);
+  if (targetEl) targetEl.textContent = formatDuration(WORK_TARGET_MIN);
+
+  const pct = WORK_TARGET_MIN > 0 ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100)) : 0;
+  if (pctEl) pctEl.textContent = `${pct}%`;
+}
+
 // --------------------------- Widgets (Mini Calendar) ---------------------
 
 /**
@@ -140,9 +173,6 @@ function setRing(percent) {
  * - #cal-grid
  * - #cal-prev
  * - #cal-next
- * And the CSS for .mini-day, .muted, .today
- *
- * If not present, it safely does nothing.
  */
 let calRef = new Date();
 
@@ -170,7 +200,6 @@ function buildMiniCalendar() {
   const today = new Date();
   const isThisMonth = today.getFullYear() === year && today.getMonth() === month;
 
-  // 42 cells (6 weeks)
   for (let i = 0; i < 42; i++) {
     const cell = document.createElement("div");
     cell.className = "mini-day";
@@ -185,10 +214,7 @@ function buildMiniCalendar() {
       cell.classList.add("muted");
     } else {
       cell.textContent = String(dayNum);
-
-      if (isThisMonth && dayNum === today.getDate()) {
-        cell.classList.add("today");
-      }
+      if (isThisMonth && dayNum === today.getDate()) cell.classList.add("today");
     }
 
     gridEl.appendChild(cell);
@@ -228,20 +254,15 @@ function recomputeLiveUsage(nowMs) {
 
   switch (state.status) {
     case "in_operation":
-      op += elapsedMin;
-      break;
+      op += elapsedMin; break;
     case "break":
-      br += elapsedMin;
-      break;
+      br += elapsedMin; break;
     case "meeting":
-      meet += elapsedMin;
-      break;
+      meet += elapsedMin; break;
     case "handling":
-      hand += elapsedMin;
-      break;
+      hand += elapsedMin; break;
     case "unavailable":
-      unav += elapsedMin;
-      break;
+      unav += elapsedMin; break;
   }
 
   if (br > BREAK_LIMIT_MIN) br = BREAK_LIMIT_MIN;
@@ -257,20 +278,15 @@ function applyElapsedToState(nowMs) {
 
   switch (state.status) {
     case "in_operation":
-      state.operationMinutes += elapsedMin;
-      break;
+      state.operationMinutes += elapsedMin; break;
     case "break":
-      state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin);
-      break;
+      state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin); break;
     case "meeting":
-      state.meetingMinutes += elapsedMin;
-      break;
+      state.meetingMinutes += elapsedMin; break;
     case "handling":
-      state.handlingMinutes += elapsedMin;
-      break;
+      state.handlingMinutes += elapsedMin; break;
     case "unavailable":
-      state.unavailableMinutes += elapsedMin;
-      break;
+      state.unavailableMinutes += elapsedMin; break;
   }
 
   state.lastStatusChange = nowMs;
@@ -338,10 +354,14 @@ function loadStateForToday(userId) {
 // --------------------------- UI init ------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
-  const navButtons = document.querySelectorAll(".nav-link[data-page]");
-
-  navButtons.forEach((btn) => {
-    btn.addEventListener("click", () => switchPage(btn.dataset.page));
+  // ✅ FIX: make sure menu taps always work (even if HTML changes slightly)
+  document.querySelectorAll(".nav-link").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const page = btn.dataset.page;
+      if (!page) return; // ignore logout
+      e.preventDefault();
+      switchPage(page);
+    });
   });
 
   document.getElementById("login-form")?.addEventListener("submit", handleLogin);
@@ -368,7 +388,13 @@ document.addEventListener("DOMContentLoaded", () => {
 function switchPage(pageId) {
   // hide all pages
   document.querySelectorAll(".page-section").forEach((pg) => pg.classList.add("hidden"));
-  document.getElementById(`page-${pageId}`)?.classList.remove("hidden");
+
+  const target = document.getElementById(`page-${pageId}`);
+  if (!target) {
+    console.warn(`Page not found: page-${pageId}. Check your HTML IDs.`);
+    return;
+  }
+  target.classList.remove("hidden");
 
   // activate nav
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
@@ -377,12 +403,9 @@ function switchPage(pageId) {
 
   // floating chat toggle
   const floatToggle = document.getElementById("float-chat-toggle");
-  if (!floatToggle) return;
-
-  if (!currentUser || pageId === "messages") {
-    floatToggle.classList.add("hidden");
-  } else {
-    floatToggle.classList.remove("hidden");
+  if (floatToggle) {
+    if (!currentUser || pageId === "messages") floatToggle.classList.add("hidden");
+    else floatToggle.classList.remove("hidden");
   }
 }
 
@@ -391,8 +414,8 @@ function switchPage(pageId) {
 function handleLogin(e) {
   e.preventDefault();
 
-  const id = document.getElementById("ccmsId").value.trim();
-  const pw = document.getElementById("password").value;
+  const id = document.getElementById("ccmsId")?.value?.trim() || "";
+  const pw = document.getElementById("password")?.value || "";
 
   if (!USERS[id]) return showError("User not found.");
   if (USERS[id].password !== pw) return showError("Incorrect password.");
@@ -536,6 +559,9 @@ function finishInit(now) {
   updateBreakUI(live.breakUsed);
   updateStatusMinutesUI(live);
 
+  // ✅ worked hours box
+  updateWorkUI(computeWorkedMinutes(live));
+
   // ✅ widgets (safe if elements not found)
   renderClockWidget();
   buildMiniCalendar();
@@ -572,6 +598,7 @@ async function tick() {
 
   updateBreakUI(live.breakUsed);
   updateStatusMinutesUI(live);
+  updateWorkUI(computeWorkedMinutes(live));
 
   await syncStateToFirestore(live);
 }
@@ -601,6 +628,7 @@ function updateDashboardUI() {
   const live = recomputeLiveUsage(Date.now());
   updateBreakUI(live.breakUsed);
   updateStatusMinutesUI(live);
+  updateWorkUI(computeWorkedMinutes(live));
 
   const supPanel = document.getElementById("supervisor-panel");
   if (supPanel) supPanel.classList.toggle("hidden", currentUser.role !== "supervisor");
@@ -615,16 +643,13 @@ function updateBreakUI(used) {
   if (usedEl) usedEl.textContent = usedMin;
   if (remEl) remEl.textContent = remaining;
 
-  // optional widget text: "0 / 45"
   const breakText = document.getElementById("break-text");
   if (breakText) breakText.textContent = `${usedMin} / ${BREAK_LIMIT_MIN}`;
 
-  // optional ring
   setRing((usedMin / BREAK_LIMIT_MIN) * 100);
 }
 
 function updateStatusMinutesUI(live) {
-  // show hr/min format in main UI
   const opEl = document.getElementById("op-min");
   const meetEl = document.getElementById("meet-min");
   const handEl = document.getElementById("hand-min");
@@ -729,7 +754,6 @@ function showLogin() {
   const floatToggle = document.getElementById("float-chat-toggle");
   if (floatToggle) floatToggle.classList.add("hidden");
 
-  // stop widgets interval
   if (clockIntervalId) clearInterval(clockIntervalId);
   clockIntervalId = null;
 }
@@ -742,15 +766,11 @@ function showDashboard() {
   switchPage("home");
   updateDashboardUI();
 
-  // ✅ widgets (safe if HTML elements not found)
   renderClockWidget();
   buildMiniCalendar();
   hookCalendarButtons();
 
-  // start clock once
   if (!clockIntervalId) {
     clockIntervalId = setInterval(renderClockWidget, 1000);
   }
 }
-
-
