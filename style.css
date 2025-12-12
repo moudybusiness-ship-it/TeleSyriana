@@ -512,6 +512,18 @@ textarea:focus {
 }
 
 /* ========== Messages / Chat page ========== */
+.chat-dm{
+  width:100%;
+  text-align:left;
+  border:0;
+  background:transparent;
+  padding:10px;
+  border-radius:12px;
+  cursor:pointer;
+}
+.chat-dm:hover{ background: rgba(255,255,255,0.06); }
+.chat-dm.active{ background: rgba(255,255,255,0.10); }
+
 /* ===== CHAT PAGE FIX ===== */
 #page-messages {
   height: calc(100vh - 120px);
@@ -1055,6 +1067,7 @@ textarea:focus {
 .messages-card {
   min-height: 260px;
 }
+
 
 
 
