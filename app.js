@@ -6,7 +6,6 @@ const {
   doc,
   setDoc,
   getDoc,
-  updateDoc,
   collection,
   query,
   where,
@@ -34,14 +33,21 @@ let state = null;
 let timerId = null;
 let supUnsub = null;
 
+// نمسك عناصر البالونة مرة وحدة
+let floatToggle = null;
+let floatPanel = null;
+
 // -------------------------------- helpers --------------------------------
 
 function getTodayKey() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(d.getDate()).padStart(2, "0")}`;
+  return (
+    d.getFullYear() +
+    "-" +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(d.getDate()).padStart(2, "0")
+  );
 }
 
 function statusLabel(code) {
@@ -165,7 +171,10 @@ function subscribeSupervisorDashboard() {
   if (!currentUser || currentUser.role !== "supervisor") return;
   if (supUnsub) return;
 
-  const q = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
+  const q = query(
+    collection(db, AGENT_DAYS_COL),
+    where("day", "==", getTodayKey())
+  );
 
   supUnsub = onSnapshot(q, (snapshot) => {
     const rows = [];
@@ -195,8 +204,12 @@ function loadStateForToday(userId) {
 // --------------------------- UI init -----------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
-  const navButtons = document.querySelectorAll(".nav-link");
+  // نمسك عناصر البالونة
+  floatToggle = document.getElementById("float-chat-toggle");
+  floatPanel = document.getElementById("float-chat-panel");
 
+  // أزرار الـ nav
+  const navButtons = document.querySelectorAll(".nav-link");
   navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       switchPage(btn.dataset.page);
@@ -206,49 +219,25 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("login-form").addEventListener("submit", handleLogin);
   document.getElementById("logout-btn").addEventListener("click", handleLogout);
   document.getElementById("status-select").addEventListener("change", handleStatusChange);
-  document
-    .getElementById("settings-form")
-    .addEventListener("submit", handleSettingsSave);
+  document.getElementById("settings-form").addEventListener("submit", handleSettingsSave);
 
+  // محاولة استرجاع مستخدم من localStorage
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
-    const u = JSON.parse(savedUser);
-    if (USERS[u.id]) {
-      currentUser = u;
-      initStateForUser();
-      showDashboard();
-      return;
-    }
+    try {
+      const u = JSON.parse(savedUser);
+      if (u && USERS[u.id]) {
+        currentUser = u;
+        initStateForUser();   // async بس عادي
+        showDashboard();      // يفتح الداشبورد مباشرة
+        return;
+      }
+    } catch {}
   }
 
+  // لو ما في يوزر محفوظ → صفحة الدخول
   showLogin();
 });
-
-// ---------------------- Floating chat visibility -----------------------
-
-function updateFloatingChatVisibility(pageId) {
-  const toggle = document.getElementById("float-chat-toggle");
-  const panel = document.getElementById("float-chat-panel");
-  if (!toggle || !panel) return;
-
-  // لو ما في مستخدم → خفي دائماً
-  if (!currentUser) {
-    toggle.classList.add("hidden");
-    panel.classList.add("hidden");
-    return;
-  }
-
-  // لو نحن بصفحة المسجات → ما في داعي للبالونة
-  if (pageId === "messages") {
-    toggle.classList.add("hidden");
-    panel.classList.add("hidden");
-    return;
-  }
-
-  // باقي الصفحات (home/tasks/settings) → أظهر البالونة
-  toggle.classList.remove("hidden");
-  // ما نفتح البانيل إلا لو كبس عليها
-}
 
 // -------------------------- Pages switching -----------------------------
 
@@ -266,8 +255,6 @@ function switchPage(pageId) {
   });
 
   // البالونة: ما تظهر على صفحة الرسائل
-  const floatToggle = document.getElementById("float-chat-toggle");
-  const floatPanel = document.getElementById("float-chat-panel");
   if (floatToggle) {
     if (pageId === "messages") {
       floatToggle.classList.add("hidden");
@@ -277,36 +264,6 @@ function switchPage(pageId) {
     }
   }
 }
-
-// --------------------------- View switching ----------------------------
-
-function showLogin() {
-  document.getElementById("dashboard-screen").classList.add("hidden");
-  document.getElementById("login-screen").classList.remove("hidden");
-  document.getElementById("main-nav").classList.add("hidden");
-
-  // أخفي البالونة و البانل كلياً
-  const floatToggle = document.getElementById("float-chat-toggle");
-  const floatPanel = document.getElementById("float-chat-panel");
-  if (floatToggle) floatToggle.classList.add("hidden");
-  if (floatPanel) floatPanel.classList.add("hidden");
-}
-
-function showDashboard() {
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("dashboard-screen").classList.remove("hidden");
-  document.getElementById("main-nav").classList.remove("hidden");
-
-  switchPage("home");
-  updateDashboardUI();
-
-  // إظهار البالونة لما يكون في مستخدم داخل
-  const floatToggle = document.getElementById("float-chat-toggle");
-  if (floatToggle && currentUser) {
-    floatToggle.classList.remove("hidden");
-  }
-}
-
 
 // -------------------------- Login / Logout ------------------------------
 
@@ -340,7 +297,7 @@ async function handleLogout() {
   }
 
   localStorage.removeItem(USER_KEY);
-  timerId && clearInterval(timerId);
+  if (timerId) clearInterval(timerId);
   if (supUnsub) {
     supUnsub();
     supUnsub = null;
@@ -409,7 +366,9 @@ async function initStateForUser() {
 }
 
 function finishInit(now) {
-  if (currentUser.role === "supervisor") subscribeSupervisorDashboard();
+  if (currentUser.role === "supervisor") {
+    subscribeSupervisorDashboard();
+  }
 
   loadUserProfile();
   startTimer();
@@ -419,7 +378,7 @@ function finishInit(now) {
 // ----------------------------- Timer -----------------------------------
 
 function startTimer() {
-  timerId && clearInterval(timerId);
+  if (timerId) clearInterval(timerId);
   timerId = setInterval(tick, 10000);
   tick();
 }
@@ -451,6 +410,8 @@ async function tick() {
 // ------------------------- Dashboard UI --------------------------------
 
 function updateDashboardUI() {
+  if (!currentUser || !state) return;
+
   const welcomeTitle = document.getElementById("welcome-title");
   const welcomeSubtitle = document.getElementById("welcome-subtitle");
   const statusValue = document.getElementById("status-value");
@@ -493,6 +454,7 @@ function updateStatusMinutesUI(live) {
 
 function buildSupervisorTableFromFirestore(rows) {
   const body = document.getElementById("sup-table-body");
+  if (!body) return;
   body.innerHTML = "";
 
   const totals = {
@@ -507,24 +469,24 @@ function buildSupervisorTableFromFirestore(rows) {
     .filter((r) => r.role === "agent")
     .forEach((r) => {
       const status = r.status || "unavailable";
-      totals[status]++;
+      if (totals[status] != null) totals[status]++;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-      <td>${r.name}</td>
-      <td>${r.userId}</td>
-      <td>${r.role.toUpperCase()}</td>
-      <td><span class="sup-status-pill status-${status}">${statusLabel(
-        status
-      )}</span></td>
-      <td>${Math.floor(r.operationMinutes || 0)} min</td>
-      <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
-      <td>${Math.floor(r.meetingMinutes || 0)} min</td>
-      <td>${Math.floor(r.unavailableMinutes || 0)} min</td>
-      <td>${
-        r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"
-      }</td>
-    `;
+        <td>${r.name}</td>
+        <td>${r.userId}</td>
+        <td>${r.role.toUpperCase()}</td>
+        <td><span class="sup-status-pill status-${status}">${statusLabel(
+          status
+        )}</span></td>
+        <td>${Math.floor(r.operationMinutes || 0)} min</td>
+        <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
+        <td>${Math.floor(r.meetingMinutes || 0)} min</td>
+        <td>${Math.floor(r.unavailableMinutes || 0)} min</td>
+        <td>${
+          r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"
+        }</td>
+      `;
       body.appendChild(tr);
     });
 
@@ -579,11 +541,9 @@ function showLogin() {
   document.getElementById("login-screen").classList.remove("hidden");
   document.getElementById("main-nav").classList.add("hidden");
 
-  // إخفاء بالونة الشات و البانيل تماماً
-  const toggle = document.getElementById("float-chat-toggle");
-  const panel = document.getElementById("float-chat-panel");
-  if (toggle) toggle.classList.add("hidden");
-  if (panel) panel.classList.add("hidden");
+  // أخفي البالونة و البانل
+  if (floatToggle) floatToggle.classList.add("hidden");
+  if (floatPanel) floatPanel.classList.add("hidden");
 }
 
 function showDashboard() {
@@ -591,7 +551,13 @@ function showDashboard() {
   document.getElementById("dashboard-screen").classList.remove("hidden");
   document.getElementById("main-nav").classList.remove("hidden");
 
-  switchPage("home"); // هذا كمان بينادي updateFloatingChatVisibility("home")
+  switchPage("home");
   updateDashboardUI();
+
+  // إظهار البالونة لو في يوزر
+  if (floatToggle && currentUser) {
+    floatToggle.classList.remove("hidden");
+  }
 }
+
 
