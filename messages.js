@@ -1,9 +1,7 @@
 // messages.js – TeleSyriana chat UI with Firestore
 
 import { db, fs } from "./firebase.js";
-import {
-  limit
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const {
   collection,
@@ -19,10 +17,7 @@ const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 
 let currentUser = null;
-let currentRoom = "general";
 let unsubscribeMain = null;
-
-/* ---------------- USER ---------------- */
 
 function loadUserFromStorage() {
   try {
@@ -33,8 +28,6 @@ function loadUserFromStorage() {
   } catch {}
 }
 
-/* ---------------- INIT ---------------- */
-
 document.addEventListener("DOMContentLoaded", () => {
   loadUserFromStorage();
 
@@ -44,71 +37,90 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!listEl || !formEl || !inputEl) return;
 
-  subscribeMainToRoom("general", listEl);
+  // ✅ اشتراك: DESC (ليطابق الـ index الموجود) وبعدين نقلب بالعرض
+  subscribeToRoom("general", listEl);
 
   formEl.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!currentUser) return alert("Login first");
+    if (!currentUser) return alert("Please login first.");
 
     const text = inputEl.value.trim();
     if (!text) return;
 
-    await addDoc(collection(db, MESSAGES_COL), {
-      room: "general",
-      text,
-      userId: currentUser.id,
-      name: currentUser.name,
-      role: currentUser.role,
-      ts: serverTimestamp(),
-    });
-
-    inputEl.value = "";
+    try {
+      await addDoc(collection(db, MESSAGES_COL), {
+        room: "general",
+        text,
+        userId: currentUser.id,
+        name: currentUser.name,
+        role: currentUser.role,
+        ts: serverTimestamp(),
+      });
+      inputEl.value = "";
+    } catch (err) {
+      console.error(err);
+      alert("Send error: " + err.message);
+    }
   });
 });
 
-/* ---------------- FIRESTORE ---------------- */
-
-function subscribeMainToRoom(room, listEl) {
+function subscribeToRoom(room, listEl) {
   if (unsubscribeMain) unsubscribeMain();
 
   const q = query(
     collection(db, MESSAGES_COL),
     where("room", "==", room),
-    orderBy("ts", "asc"),
+    orderBy("ts", "desc"),   // ✅ IMPORTANT
     limit(100)
   );
 
-  unsubscribeMain = onSnapshot(q, (snap) => {
-    const msgs = [];
-    snap.forEach(d => msgs.push(d.data()));
-    renderMessages(listEl, msgs);
-  });
-}
+  unsubscribeMain = onSnapshot(
+    q,
+    (snap) => {
+      const msgs = [];
+      snap.forEach((d) => msgs.push({ id: d.id, ...d.data() }));
 
-/* ---------------- RENDER ---------------- */
+      // ✅ نقلبهم ليصير الأقدم فوق والأحدث تحت
+      msgs.reverse();
+
+      renderMessages(listEl, msgs);
+    },
+    (err) => {
+      console.error("Snapshot error:", err);
+      alert("Firestore error: " + err.message);
+    }
+  );
+}
 
 function renderMessages(listEl, msgs) {
   listEl.innerHTML = "";
 
-  msgs.forEach(m => {
-    const div = document.createElement("div");
-    div.className = "chat-message" + (m.userId === currentUser?.id ? " me" : "");
+  msgs.forEach((m) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "chat-message";
+    if (currentUser && m.userId === currentUser.id) wrapper.classList.add("me");
 
-    div.innerHTML = `
-      <div class="chat-message-meta">
-        ${m.name} (${m.role}) • ${formatTime(m.ts)}
-      </div>
-      <div class="chat-message-text">${m.text}</div>
-    `;
+    const meta = document.createElement("div");
+    meta.className = "chat-message-meta";
+    meta.textContent = `${m.name} (${m.role}) • ${formatTime(m.ts)}`;
 
-    listEl.appendChild(div);
+    const text = document.createElement("div");
+    text.className = "chat-message-text";
+    text.textContent = m.text || "";
+
+    wrapper.appendChild(meta);
+    wrapper.appendChild(text);
+    listEl.appendChild(wrapper);
   });
 
+  // ينزل لآخر شي
   listEl.scrollTop = listEl.scrollHeight;
 }
 
 function formatTime(ts) {
-  if (!ts?.toDate) return "";
-  return ts.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (!ts) return "";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+
 
