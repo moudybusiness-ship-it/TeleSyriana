@@ -139,41 +139,91 @@
           </section>
           <!-- ChatGPT On what to do with team's tasks -->
           <section class="card dashboard-side">
-            <h2>Today’s Snapshot</h2>
-            <p class="subtitle">Quick reminders:</p>
-            <ul class="side-list">
-              <li>✔ Keep your status updated.</li>
-              <li>✔ Use break time wisely.</li>
-              <li>✔ Be kind with callers.</li>
-            </ul>
-            <!-- clock with Digital half box and another box for today's date and calander -->
-            <section class="card dashboard-side">
-  ...
-  <ul class="side-list">...</ul>
+  <h2>Today’s Snapshot</h2>
+  <p class="subtitle">Quick reminders:</p>
 
-  <!-- ✅ Date + Clock -->
-  <div class="side-widgets">
-    <div class="side-widget">
-      <div class="side-widget-title">Today</div>
-      <div id="today-date" class="side-widget-value">—</div>
-      <div id="today-day" class="side-widget-sub">—</div>
+  <ul class="side-list">
+    <li>✔ Keep your status updated.</li>
+    <li>✔ Use break time wisely.</li>
+    <li>✔ Be kind with callers.</li>
+  </ul>
+
+  <!-- ✅ Widgets Grid (same style like your sample) -->
+  <div class="widgets-grid">
+
+    <!-- Clock -->
+    <div class="widget-card">
+      <div class="widget-head">
+        <div class="widget-title">Clock</div>
+        <button class="kebab" type="button" aria-label="menu">⋯</button>
+      </div>
+      <div id="widget-clock" class="widget-big">--:--</div>
+      <div id="widget-day" class="widget-sub">—</div>
     </div>
 
-    <div class="side-widget">
-      <div class="side-widget-title">Clock</div>
-      <div id="live-clock" class="side-widget-clock">--:--</div>
-      <div class="side-widget-sub">Local time</div>
+    <!-- Today -->
+    <div class="widget-card">
+      <div class="widget-head">
+        <div class="widget-title">Today</div>
+        <button class="kebab" type="button" aria-label="menu">⋯</button>
+      </div>
+      <div id="widget-date" class="widget-big">—</div>
+      <div class="widget-sub">Local date</div>
     </div>
+
+    <!-- Mini Calendar -->
+    <div class="widget-card widget-calendar">
+      <div class="widget-head">
+        <div id="cal-title" class="widget-title">January, 2025</div>
+        <div class="cal-nav">
+          <button id="cal-prev" class="cal-btn" type="button">‹</button>
+          <button id="cal-next" class="cal-btn" type="button">›</button>
+        </div>
+      </div>
+
+      <div class="mini-cal">
+        <div class="mini-cal-weekdays">
+          <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+        </div>
+        <div id="cal-grid" class="mini-cal-grid"></div>
+      </div>
+    </div>
+
+    <!-- Optional: Progress ring (مثلاً Break used) -->
+    <div class="widget-card">
+      <div class="widget-head">
+        <div class="widget-title">Break</div>
+        <button class="kebab" type="button" aria-label="menu">⋯</button>
+      </div>
+
+      <div class="ring-row">
+        <div class="ring">
+          <svg viewBox="0 0 36 36">
+            <path class="ring-bg"
+              d="M18 2.0845
+                 a 15.9155 15.9155 0 0 1 0 31.831
+                 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+            <path id="ring-progress" class="ring-fg"
+              stroke-dasharray="0, 100"
+              d="M18 2.0845
+                 a 15.9155 15.9155 0 0 1 0 31.831
+                 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+          </svg>
+          <div id="ring-label" class="ring-label">0%</div>
+        </div>
+
+        <div class="ring-text">
+          <div class="widget-big" id="break-text">0 / 45</div>
+          <div class="widget-sub">min used</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <div class="side-footer-note">More features coming soon…</div>
 </section>
 
-            <div class="side-footer-note">More features coming soon…</div>
-          </section>
-
-        </div>
-      </section>
 
       <!-- TASKS PAGE -->
       <section id="page-tasks" class="page-section hidden">
@@ -382,6 +432,7 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
 
 
 
