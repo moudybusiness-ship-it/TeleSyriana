@@ -190,7 +190,7 @@ function subscribeMainToRoom(room, listEl) {
   const qRoom = query(
   colRef,
   where("room", "==", room),
-  orderBy("ts", "desc")
+  orderBy("ts", "asc")
 );
 
 
@@ -212,7 +212,7 @@ function subscribeFloatToGeneral(floatList) {
   const qGeneral = query(
   colRef,
   where("room", "==", "general"),
-  orderBy("ts", "desc")
+  orderBy("ts", "asc")
 );
 
 
@@ -337,6 +337,7 @@ function formatTime(ts) {
     minute: "2-digit",
   });
 }
+
 
 
 
