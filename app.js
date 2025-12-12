@@ -59,6 +59,91 @@ function statusLabel(code) {
       return code;
   }
 }
+function pad2(n){ return String(n).padStart(2, "0"); }
+
+function renderClockWidget(){
+  const clockEl = document.getElementById("widget-clock");
+  const dayEl = document.getElementById("widget-day");
+  const dateEl = document.getElementById("widget-date");
+  if (!clockEl || !dayEl || !dateEl) return;
+
+  const now = new Date();
+  clockEl.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+
+  dayEl.textContent = now.toLocaleDateString(undefined, { weekday:"long" });
+  dateEl.textContent = now.toLocaleDateString(undefined, { day:"2-digit", month:"short" });
+}
+
+function setRing(percent){
+  const p = Math.max(0, Math.min(100, Math.round(percent)));
+  const ring = document.getElementById("ring-progress");
+  const label = document.getElementById("ring-label");
+  if (!ring || !label) return;
+  ring.setAttribute("stroke-dasharray", `${p}, 100`);
+  label.textContent = `${p}%`;
+}
+
+/* Mini calendar */
+let calRef = new Date(); // month being displayed
+
+function monthTitle(d){
+  return d.toLocaleDateString(undefined, { month:"long", year:"numeric" });
+}
+
+function buildMiniCalendar(){
+  const titleEl = document.getElementById("cal-title");
+  const gridEl = document.getElementById("cal-grid");
+  if (!titleEl || !gridEl) return;
+
+  titleEl.textContent = monthTitle(calRef);
+  gridEl.innerHTML = "";
+
+  const year = calRef.getFullYear();
+  const month = calRef.getMonth();
+
+  // Monday-first calendar
+  const first = new Date(year, month, 1);
+  const startDay = (first.getDay() + 6) % 7; // 0=Mon ... 6=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const prevDays = new Date(year, month, 0).getDate();
+
+  const today = new Date();
+  const isThisMonth = today.getFullYear() === year && today.getMonth() === month;
+
+  // 42 cells (6 weeks)
+  for (let i = 0; i < 42; i++){
+    const cell = document.createElement("div");
+    cell.className = "mini-day";
+
+    const dayNum = i - startDay + 1;
+
+    if (dayNum <= 0){
+      cell.textContent = String(prevDays + dayNum);
+      cell.classList.add("muted");
+    } else if (dayNum > daysInMonth){
+      cell.textContent = String(dayNum - daysInMonth);
+      cell.classList.add("muted");
+    } else {
+      cell.textContent = String(dayNum);
+
+      if (isThisMonth && dayNum === today.getDate()){
+        cell.classList.add("today");
+      }
+    }
+
+    gridEl.appendChild(cell);
+  }
+}
+
+function hookCalendarButtons(){
+  const prev = document.getElementById("cal-prev");
+  const next = document.getElementById("cal-next");
+  if (!prev || !next) return;
+
+  prev.onclick = () => { calRef = new Date(calRef.getFullYear(), calRef.getMonth()-1, 1); buildMiniCalendar(); };
+  next.onclick = () => { calRef = new Date(calRef.getFullYear(), calRef.getMonth()+1, 1); buildMiniCalendar(); };
+}
 
 /**
  * ✅ Minutes -> "xx min" OR "1 hr" OR "2 hrs 13 min"
@@ -592,4 +677,5 @@ function showDashboard() {
   switchPage("home");
   updateDashboardUI();
 }
+
 
