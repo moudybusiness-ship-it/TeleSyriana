@@ -33,21 +33,14 @@ let state = null;
 let timerId = null;
 let supUnsub = null;
 
-// نمسك عناصر البالونة مرة وحدة
-let floatToggle = null;
-let floatPanel = null;
-
 // -------------------------------- helpers --------------------------------
 
 function getTodayKey() {
   const d = new Date();
-  return (
-    d.getFullYear() +
-    "-" +
-    String(d.getMonth() + 1).padStart(2, "0") +
-    "-" +
-    String(d.getDate()).padStart(2, "0")
-  );
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function statusLabel(code) {
@@ -204,12 +197,8 @@ function loadStateForToday(userId) {
 // --------------------------- UI init -----------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
-  // نمسك عناصر البالونة
-  floatToggle = document.getElementById("float-chat-toggle");
-  floatPanel = document.getElementById("float-chat-panel");
-
-  // أزرار الـ nav
   const navButtons = document.querySelectorAll(".nav-link");
+
   navButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       switchPage(btn.dataset.page);
@@ -218,50 +207,50 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("login-form").addEventListener("submit", handleLogin);
   document.getElementById("logout-btn").addEventListener("click", handleLogout);
-  document.getElementById("status-select").addEventListener("change", handleStatusChange);
-  document.getElementById("settings-form").addEventListener("submit", handleSettingsSave);
+  document
+    .getElementById("status-select")
+    .addEventListener("change", handleStatusChange);
+  document
+    .getElementById("settings-form")
+    .addEventListener("submit", handleSettingsSave);
 
-  // محاولة استرجاع مستخدم من localStorage
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
-    try {
-      const u = JSON.parse(savedUser);
-      if (u && USERS[u.id]) {
-        currentUser = u;
-        initStateForUser();   // async بس عادي
-        showDashboard();      // يفتح الداشبورد مباشرة
-        return;
-      }
-    } catch {}
+    const u = JSON.parse(savedUser);
+    if (USERS[u.id]) {
+      currentUser = u;
+      initStateForUser();
+      showDashboard();
+      return;
+    }
   }
 
-  // لو ما في يوزر محفوظ → صفحة الدخول
   showLogin();
 });
 
 // -------------------------- Pages switching -----------------------------
 
 function switchPage(pageId) {
-  // إظهار الصفحة المطلوبة
-  document.querySelectorAll(".page-section").forEach((pg) =>
-    pg.classList.add("hidden")
-  );
-  const pageEl = document.getElementById(`page-${pageId}`);
-  if (pageEl) pageEl.classList.remove("hidden");
+  // أخفي كل الصفحات
+  document
+    .querySelectorAll(".page-section")
+    .forEach((pg) => pg.classList.add("hidden"));
+  document.getElementById(`page-${pageId}`).classList.remove("hidden");
 
-  // تفعيل زر الـ Nav
+  // فعل زر الـ nav
   document.querySelectorAll(".nav-link").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.page === pageId);
+    if (btn.dataset.page === pageId) btn.classList.add("active");
+    else btn.classList.remove("active");
   });
 
-  // البالونة: ما تظهر على صفحة الرسائل
-  if (floatToggle) {
-    if (pageId === "messages") {
-      floatToggle.classList.add("hidden");
-      if (floatPanel) floatPanel.classList.add("hidden");
-    } else if (currentUser) {
-      floatToggle.classList.remove("hidden");
-    }
+  // تحكم بأيقونة الشات العائم
+  const floatToggle = document.getElementById("float-chat-toggle");
+  if (!floatToggle) return;
+
+  if (!currentUser || pageId === "messages") {
+    floatToggle.classList.add("hidden");
+  } else {
+    floatToggle.classList.remove("hidden");
   }
 }
 
@@ -298,10 +287,7 @@ async function handleLogout() {
 
   localStorage.removeItem(USER_KEY);
   if (timerId) clearInterval(timerId);
-  if (supUnsub) {
-    supUnsub();
-    supUnsub = null;
-  }
+  if (supUnsub) supUnsub();
 
   currentUser = null;
   state = null;
@@ -313,6 +299,37 @@ function showError(msg) {
   const box = document.getElementById("login-error");
   box.textContent = msg;
   box.classList.remove("hidden");
+}
+
+// --------------------- Status change (FIX) ------------------------------
+
+async function handleStatusChange(e) {
+  if (!state || !currentUser) return;
+
+  const newStatus = e.target.value;
+  const now = Date.now();
+
+  // لو خلص البريك
+  if (
+    newStatus === "break" &&
+    state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01
+  ) {
+    alert("Daily break limit (45 minutes) already reached.");
+    e.target.value = state.status;
+    return;
+  }
+
+  // ثبّت الزمن على الحالة القديمة
+  applyElapsedToState(now);
+
+  // غيّر الحالة
+  state.status = newStatus;
+  state.lastStatusChange = now;
+  saveState();
+
+  const live = recomputeLiveUsage(now);
+  await syncStateToFirestore(live);
+  updateDashboardUI();
 }
 
 // ---------------------------- Init Session ------------------------------
@@ -366,9 +383,7 @@ async function initStateForUser() {
 }
 
 function finishInit(now) {
-  if (currentUser.role === "supervisor") {
-    subscribeSupervisorDashboard();
-  }
+  if (currentUser.role === "supervisor") subscribeSupervisorDashboard();
 
   loadUserProfile();
   startTimer();
@@ -454,7 +469,6 @@ function updateStatusMinutesUI(live) {
 
 function buildSupervisorTableFromFirestore(rows) {
   const body = document.getElementById("sup-table-body");
-  if (!body) return;
   body.innerHTML = "";
 
   const totals = {
@@ -469,24 +483,24 @@ function buildSupervisorTableFromFirestore(rows) {
     .filter((r) => r.role === "agent")
     .forEach((r) => {
       const status = r.status || "unavailable";
-      if (totals[status] != null) totals[status]++;
+      totals[status]++;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.name}</td>
-        <td>${r.userId}</td>
-        <td>${r.role.toUpperCase()}</td>
-        <td><span class="sup-status-pill status-${status}">${statusLabel(
-          status
-        )}</span></td>
-        <td>${Math.floor(r.operationMinutes || 0)} min</td>
-        <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
-        <td>${Math.floor(r.meetingMinutes || 0)} min</td>
-        <td>${Math.floor(r.unavailableMinutes || 0)} min</td>
-        <td>${
-          r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"
-        }</td>
-      `;
+      <td>${r.name}</td>
+      <td>${r.userId}</td>
+      <td>${r.role.toUpperCase()}</td>
+      <td><span class="sup-status-pill status-${status}">${statusLabel(
+        status
+      )}</span></td>
+      <td>${Math.floor(r.operationMinutes || 0)} min</td>
+      <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
+      <td>${Math.floor(r.meetingMinutes || 0)} min</td>
+      <td>${Math.floor(r.unavailableMinutes || 0)} min</td>
+      <td>${
+        r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"
+      }</td>
+    `;
       body.appendChild(tr);
     });
 
@@ -541,9 +555,8 @@ function showLogin() {
   document.getElementById("login-screen").classList.remove("hidden");
   document.getElementById("main-nav").classList.add("hidden");
 
-  // أخفي البالونة و البانل
+  const floatToggle = document.getElementById("float-chat-toggle");
   if (floatToggle) floatToggle.classList.add("hidden");
-  if (floatPanel) floatPanel.classList.add("hidden");
 }
 
 function showDashboard() {
@@ -553,11 +566,7 @@ function showDashboard() {
 
   switchPage("home");
   updateDashboardUI();
-
-  // إظهار البالونة لو في يوزر
-  if (floatToggle && currentUser) {
-    floatToggle.classList.remove("hidden");
-  }
 }
+
 
 
