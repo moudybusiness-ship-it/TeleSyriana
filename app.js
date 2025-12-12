@@ -38,23 +38,38 @@ let supUnsub = null;
 
 function getTodayKey() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function statusLabel(code) {
   switch (code) {
-    case "in_operation": return "Operating";
-    case "break": return "Break";
-    case "meeting": return "Meeting";
-    case "handling": return "Handling";
-    case "unavailable": return "Unavailable";
-    default: return code;
+    case "in_operation":
+      return "Operating";
+    case "break":
+      return "Break";
+    case "meeting":
+      return "Meeting";
+    case "handling":
+      return "Handling";
+    case "unavailable":
+      return "Unavailable";
+    default:
+      return code;
   }
 }
 
 function recomputeLiveUsage(now) {
   if (!state) {
-    return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
+    return {
+      breakUsed: 0,
+      operation: 0,
+      meeting: 0,
+      handling: 0,
+      unavailable: 0,
+    };
   }
 
   const elapsedMin = (now - state.lastStatusChange) / 60000;
@@ -66,11 +81,21 @@ function recomputeLiveUsage(now) {
   let unav = state.unavailableMinutes || 0;
 
   switch (state.status) {
-    case "in_operation": op += elapsedMin; break;
-    case "break": br += elapsedMin; break;
-    case "meeting": meet += elapsedMin; break;
-    case "handling": hand += elapsedMin; break;
-    case "unavailable": unav += elapsedMin; break;
+    case "in_operation":
+      op += elapsedMin;
+      break;
+    case "break":
+      br += elapsedMin;
+      break;
+    case "meeting":
+      meet += elapsedMin;
+      break;
+    case "handling":
+      hand += elapsedMin;
+      break;
+    case "unavailable":
+      unav += elapsedMin;
+      break;
   }
 
   if (br > BREAK_LIMIT_MIN) br = BREAK_LIMIT_MIN;
@@ -85,11 +110,24 @@ function applyElapsedToState(now) {
   if (elapsedMin <= 0) return;
 
   switch (state.status) {
-    case "in_operation": state.operationMinutes += elapsedMin; break;
-    case "break": state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin); break;
-    case "meeting": state.meetingMinutes += elapsedMin; break;
-    case "handling": state.handlingMinutes += elapsedMin; break;
-    case "unavailable": state.unavailableMinutes += elapsedMin; break;
+    case "in_operation":
+      state.operationMinutes += elapsedMin;
+      break;
+    case "break":
+      state.breakUsedMinutes = Math.min(
+        BREAK_LIMIT_MIN,
+        state.breakUsedMinutes + elapsedMin
+      );
+      break;
+    case "meeting":
+      state.meetingMinutes += elapsedMin;
+      break;
+    case "handling":
+      state.handlingMinutes += elapsedMin;
+      break;
+    case "unavailable":
+      state.unavailableMinutes += elapsedMin;
+      break;
   }
 
   state.lastStatusChange = now;
@@ -168,7 +206,9 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("login-form").addEventListener("submit", handleLogin);
   document.getElementById("logout-btn").addEventListener("click", handleLogout);
   document.getElementById("status-select").addEventListener("change", handleStatusChange);
-  document.getElementById("settings-form").addEventListener("submit", handleSettingsSave);
+  document
+    .getElementById("settings-form")
+    .addEventListener("submit", handleSettingsSave);
 
   const savedUser = localStorage.getItem(USER_KEY);
   if (savedUser) {
@@ -184,11 +224,57 @@ document.addEventListener("DOMContentLoaded", () => {
   showLogin();
 });
 
+// ---------------------- Floating chat visibility -----------------------
+
+function updateFloatingChatVisibility(pageId) {
+  const toggle = document.getElementById("float-chat-toggle");
+  const panel = document.getElementById("float-chat-panel");
+  if (!toggle || !panel) return;
+
+  // لو ما في مستخدم → خفي دائماً
+  if (!currentUser) {
+    toggle.classList.add("hidden");
+    panel.classList.add("hidden");
+    return;
+  }
+
+  // لو نحن بصفحة المسجات → ما في داعي للبالونة
+  if (pageId === "messages") {
+    toggle.classList.add("hidden");
+    panel.classList.add("hidden");
+    return;
+  }
+
+  // باقي الصفحات (home/tasks/settings) → أظهر البالونة
+  toggle.classList.remove("hidden");
+  // ما نفتح البانيل إلا لو كبس عليها
+}
+
 // -------------------------- Pages switching -----------------------------
 
 function switchPage(pageId) {
-  document.querySelectorAll(".page-section").forEach((pg) => pg.classList.add("hidden"));
-  document.getElementById(`page-${pageId}`).classList.remove("hidden");
+  // إخفاء كل الصفحات
+  document
+    .querySelectorAll(".page-section")
+    .forEach((pg) => pg.classList.add("hidden"));
+
+  const pageEl = document.getElementById(`page-${pageId}`);
+  if (pageEl) {
+    pageEl.classList.remove("hidden");
+  }
+
+  // تحديث الحالة للأزرار في الـ nav
+  const navButtons = document.querySelectorAll(".nav-link");
+  navButtons.forEach((btn) => {
+    if (btn.dataset.page === pageId) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  // تحديث ظهور بالونة الشات حسب الصفحة
+  updateFloatingChatVisibility(pageId);
 }
 
 // -------------------------- Login / Logout ------------------------------
@@ -224,7 +310,10 @@ async function handleLogout() {
 
   localStorage.removeItem(USER_KEY);
   timerId && clearInterval(timerId);
-  supUnsub && supUnsub();
+  if (supUnsub) {
+    supUnsub();
+    supUnsub = null;
+  }
 
   currentUser = null;
   state = null;
@@ -357,7 +446,10 @@ function updateDashboardUI() {
 
 function updateBreakUI(used) {
   document.getElementById("break-used").textContent = Math.floor(used);
-  document.getElementById("break-remaining").textContent = Math.max(0, BREAK_LIMIT_MIN - Math.floor(used));
+  document.getElementById("break-remaining").textContent = Math.max(
+    0,
+    BREAK_LIMIT_MIN - Math.floor(used)
+  );
 }
 
 function updateStatusMinutesUI(live) {
@@ -380,24 +472,30 @@ function buildSupervisorTableFromFirestore(rows) {
     unavailable: 0,
   };
 
-  rows.filter(r => r.role === "agent").forEach((r) => {
-    const status = r.status || "unavailable";
-    totals[status]++;
+  rows
+    .filter((r) => r.role === "agent")
+    .forEach((r) => {
+      const status = r.status || "unavailable";
+      totals[status]++;
 
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
       <td>${r.name}</td>
       <td>${r.userId}</td>
       <td>${r.role.toUpperCase()}</td>
-      <td><span class="sup-status-pill status-${status}">${statusLabel(status)}</span></td>
+      <td><span class="sup-status-pill status-${status}">${statusLabel(
+        status
+      )}</span></td>
       <td>${Math.floor(r.operationMinutes || 0)} min</td>
       <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
       <td>${Math.floor(r.meetingMinutes || 0)} min</td>
       <td>${Math.floor(r.unavailableMinutes || 0)} min</td>
-      <td>${r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"}</td>
+      <td>${
+        r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"
+      }</td>
     `;
-    body.appendChild(tr);
-  });
+      body.appendChild(tr);
+    });
 
   document.getElementById("sum-op").textContent = totals.in_operation;
   document.getElementById("sum-break").textContent = totals.break;
@@ -428,13 +526,17 @@ async function handleSettingsSave(e) {
 
   const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
 
-  await setDoc(ref, {
-    userId: currentUser.id,
-    name: currentUser.name,
-    birthday,
-    notes,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  await setDoc(
+    ref,
+    {
+      userId: currentUser.id,
+      name: currentUser.name,
+      birthday,
+      notes,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   alert("Settings saved successfully.");
 }
@@ -445,6 +547,12 @@ function showLogin() {
   document.getElementById("dashboard-screen").classList.add("hidden");
   document.getElementById("login-screen").classList.remove("hidden");
   document.getElementById("main-nav").classList.add("hidden");
+
+  // إخفاء بالونة الشات و البانيل تماماً
+  const toggle = document.getElementById("float-chat-toggle");
+  const panel = document.getElementById("float-chat-panel");
+  if (toggle) toggle.classList.add("hidden");
+  if (panel) panel.classList.add("hidden");
 }
 
 function showDashboard() {
@@ -452,6 +560,6 @@ function showDashboard() {
   document.getElementById("dashboard-screen").classList.remove("hidden");
   document.getElementById("main-nav").classList.remove("hidden");
 
-  switchPage("home");
+  switchPage("home"); // هذا كمان بينادي updateFloatingChatVisibility("home")
   updateDashboardUI();
 }
