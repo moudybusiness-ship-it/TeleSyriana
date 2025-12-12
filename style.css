@@ -512,6 +512,25 @@ textarea:focus {
 }
 
 /* ========== Messages / Chat page ========== */
+/* ✅ خلي صندوق الرسائل يعمل scrolling بدل ما يكبر الصفحة */
+#chat-message-list {
+  height: 52vh;           /* عدّلها إذا بدك أكبر/أصغر */
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* ✅ الشات العائم كمان scrolling */
+#float-chat-messages {
+  max-height: 260px;      /* عدّلها حسب شكل البالونة */
+  overflow-y: auto;
+  padding: 10px;
+}
+
+/* (اختياري) تحسين تمرير على الموبايل */
+#chat-message-list,
+#float-chat-messages {
+  -webkit-overflow-scrolling: touch;
+}
 
 .page-section {
   margin-top: 10px;
@@ -975,3 +994,4 @@ textarea:focus {
 .messages-card {
   min-height: 260px;
 }
+
