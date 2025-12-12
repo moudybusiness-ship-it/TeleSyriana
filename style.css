@@ -541,7 +541,7 @@ textarea:focus {
 }
 .chat-message.me {
   margin-left: auto;
-  background: #e6d6ff;
+  background: #fff;
 }
 .chat-message-meta {
   font-size: 12px;
@@ -1060,6 +1060,7 @@ textarea:focus {
 .messages-card {
   min-height: 260px;
 }
+
 
 
 
