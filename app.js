@@ -146,24 +146,27 @@ function setRing(percent) {
  * - #work-percent
  */
 function updateWorkUI(workedMin) {
-  const usedEl = document.getElementById("work-used");
-  const remEl = document.getElementById("work-remaining");
-  const targetEl = document.getElementById("work-target");
-  const pctEl = document.getElementById("work-percent");
-
-  // if box not in HTML, do nothing
-  if (!usedEl && !remEl && !targetEl && !pctEl) return;
-
   const used = Math.max(0, Math.floor(workedMin));
   const remaining = Math.max(0, WORK_TARGET_MIN - used);
 
-  if (usedEl) usedEl.textContent = formatDuration(used);
-  if (remEl) remEl.textContent = formatDuration(remaining);
-  if (targetEl) targetEl.textContent = formatDuration(WORK_TARGET_MIN);
+  // text
+  const workText = document.getElementById("work-text");
+  const targetText = document.getElementById("work-target-text");
+  const remainingText = document.getElementById("work-remaining-text");
 
+  if (workText) workText.textContent = formatDuration(used);
+  if (targetText) targetText.textContent = formatDuration(WORK_TARGET_MIN);
+  if (remainingText) remainingText.textContent = formatDuration(remaining);
+
+  // ring
   const pct = WORK_TARGET_MIN > 0 ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100)) : 0;
-  if (pctEl) pctEl.textContent = `${pct}%`;
+  const ring = document.getElementById("work-ring-progress");
+  const label = document.getElementById("work-ring-label");
+
+  if (ring) ring.setAttribute("stroke-dasharray", `${pct}, 100`);
+  if (label) label.textContent = `${pct}%`;
 }
+
 
 // --------------------------- Widgets (Mini Calendar) ---------------------
 
@@ -774,3 +777,4 @@ function showDashboard() {
     clockIntervalId = setInterval(renderClockWidget, 1000);
   }
 }
+
