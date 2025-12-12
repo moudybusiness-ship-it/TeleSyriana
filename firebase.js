@@ -12,7 +12,8 @@ import {
   where,
   orderBy,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  addDoc,              // ✅ أضفنا addDoc هون
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // Firebase config تبع مشروعك
@@ -29,7 +30,7 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// نصدّر كل الفنكشنز اللي محتاجينها في app.js
+// نصدّر كل الفنكشنز اللي محتاجينها في app.js و messages.js
 export const fs = {
   doc,
   setDoc,
@@ -40,5 +41,6 @@ export const fs = {
   where,
   orderBy,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  addDoc, // ✅ مهم للشات
 };
