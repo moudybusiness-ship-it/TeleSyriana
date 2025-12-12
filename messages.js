@@ -15,13 +15,6 @@ const {
   limit,
 } = fs;
 
-const qRoom = query(
-  colRef,
-  where("room", "==", room),
-  orderBy("ts", "desc"),
-  limit(50)
-);
-
 const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 
@@ -345,6 +338,7 @@ function formatTime(ts) {
     minute: "2-digit",
   });
 }
+
 
 
 
