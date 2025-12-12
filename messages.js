@@ -223,8 +223,7 @@ function subscribeFloatToGeneral(floatList) {
 
 // ====== init ======
 document.addEventListener("DOMContentLoaded", () => {
-  const pageMessages = document.getElementById("page-messages");
-  if (!pageMessages) return;
+  const hasMainChat = !!document.getElementByID("chat-message-list")
 
   const roomButtons = document.querySelectorAll(".chat-room");
   const roomNameEl = document.getElementById("chat-room-name");
@@ -339,3 +338,4 @@ document.addEventListener("DOMContentLoaded", () => {
   subscribeMainToRoom(currentRoom, listEl);
   subscribeFloatToGeneral(floatList);
 });
+
