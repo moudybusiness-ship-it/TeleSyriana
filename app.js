@@ -1,9 +1,8 @@
-// app.js — TeleSyriana Agent Access Panel (Firestore + daily docs + multi-page UI) (FIXED)
-// ✅ Blocks mobile phones (allows iPad + Desktop only)
-// ✅ Stable init, no duplicate listeners
-// ✅ Better page switching + floating chat visibility rules
-// ✅ Keeps messages.js informed via telesyriana:user-changed
-// ✅ Safe UI updates (won't crash if an element is missing)
+// app.js — TeleSyriana Agent Access Panel (UPDATED FIX)
+// ✅ Fires telesyriana:user-changed on session restore
+// ✅ Fallback enables Messages input if user is logged-in
+// ✅ Better error handling (alerts on write failures)
+// ✅ Floating chat shell only (messages.js handles content)
 
 import { db, fs } from "./firebase.js";
 
@@ -29,9 +28,8 @@ const USERS = {
 
 const USER_KEY = "telesyrianaUser";
 const STATE_KEY = "telesyrianaState";
-const BREAK_LIMIT_MIN = 45;
 
-// ✅ Work target (8 hours)
+const BREAK_LIMIT_MIN = 45;
 const WORK_TARGET_MIN = 8 * 60;
 
 const AGENT_DAYS_COL = "agentDays";
@@ -39,81 +37,46 @@ const USER_PROFILE_COL = "userProfiles";
 
 let currentUser = null;
 let state = null;
+
 let timerId = null;
 let supUnsub = null;
-
-// widgets timers
 let clockIntervalId = null;
 
-// floating chat UI
-let floatUIHooked = false;
-
-// guard duplicate init
 let appInited = false;
 
 /* =========================
-   ✅ BLOCK MOBILE PHONES
-   Allows: iPad + Desktop
-   Blocks: phones (Android/iPhone)
+   ✅ DEVICE BLOCK (PHONES)
 ========================= */
 function isIPadLike() {
-  // iPadOS 13+ may report as MacIntel with touch points
-  return (
-    /iPad/i.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  );
+  return /iPad/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
-
 function isPhoneLike() {
   const ua = navigator.userAgent || "";
-  // block common phone identifiers (Android Mobile, iPhone, iPod)
   if (/iPhone|iPod/i.test(ua)) return true;
   if (/Android/i.test(ua) && /Mobile/i.test(ua)) return true;
-  // Some browsers include "Mobile" for phones
   if (/Mobile/i.test(ua) && !isIPadLike()) return true;
   return false;
 }
-
 function ensureAllowedDeviceOrBlock() {
-  // allow iPad
   if (isIPadLike()) return true;
-
-  // block phones
   if (isPhoneLike()) {
     renderMobileBlockedScreen();
     return false;
   }
-
-  // desktop/tablet non-phone -> allowed
   return true;
 }
-
 function renderMobileBlockedScreen() {
-  document.documentElement.style.height = "100%";
-  document.body.style.height = "100%";
-  document.body.style.margin = "0";
-
   document.body.innerHTML = `
     <div style="
-      min-height:100vh;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding:24px;
-      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      background: linear-gradient(135deg, #ff2c8b, #ff8bd3);
-      color:#fff;
-      text-align:center;
-    ">
+      min-height:100vh;display:flex;align-items:center;justify-content:center;
+      padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:linear-gradient(135deg,#ff2c8b,#ff8bd3);color:#fff;text-align:center;">
       <div style="
-        width:min(520px, 92vw);
-        background: rgba(255,255,255,0.15);
-        border:1px solid rgba(255,255,255,0.35);
-        border-radius:18px;
-        padding:22px 18px;
-        backdrop-filter: blur(14px);
-        box-shadow: 0 18px 40px rgba(0,0,0,0.25);
-      ">
+        width:min(520px,92vw);background:rgba(255,255,255,.15);
+        border:1px solid rgba(255,255,255,.35);border-radius:18px;
+        padding:22px 18px;backdrop-filter:blur(14px);
+        box-shadow:0 18px 40px rgba(0,0,0,.25);">
         <div style="font-size:20px;font-weight:900;margin-bottom:8px;">
           TeleSyriana Portal
         </div>
@@ -129,7 +92,13 @@ function renderMobileBlockedScreen() {
   `;
 }
 
-/* ------------------------------ helpers --------------------------------- */
+/* =========================
+   HELPERS
+========================= */
+function notifyUserChanged() {
+  // messages.js listens to this to refresh currentUser + enable inputs
+  window.dispatchEvent(new Event("telesyriana:user-changed"));
+}
 
 function getTodayKey() {
   const d = new Date();
@@ -140,35 +109,24 @@ function getTodayKey() {
 
 function statusLabel(code) {
   switch (code) {
-    case "in_operation":
-      return "Operating";
-    case "break":
-      return "Break";
-    case "meeting":
-      return "Meeting";
-    case "handling":
-      return "Handling";
-    case "unavailable":
-      return "Unavailable";
-    default:
-      return code;
+    case "in_operation": return "Operating";
+    case "break": return "Break";
+    case "meeting": return "Meeting";
+    case "handling": return "Handling";
+    case "unavailable": return "Unavailable";
+    default: return code;
   }
 }
 
 function formatDuration(mins) {
   const m = Math.max(0, Math.floor(Number(mins) || 0));
   if (m < 60) return `${m} min`;
-
   const h = Math.floor(m / 60);
   const r = m % 60;
-
   const hrLabel = h === 1 ? "1 hr" : `${h} hrs`;
-  if (r === 0) return hrLabel;
-
-  return `${hrLabel} ${r} min`;
+  return r === 0 ? hrLabel : `${hrLabel} ${r} min`;
 }
 
-// ✅ Worked minutes = operation + meeting + handling + break (NO unavailable)
 function computeWorkedMinutes(live) {
   const op = Number(live.operation) || 0;
   const meet = Number(live.meeting) || 0;
@@ -177,11 +135,10 @@ function computeWorkedMinutes(live) {
   return op + meet + hand + br;
 }
 
-/* --------------------------- Widgets (Clock/Date) ------------------------ */
-
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
+/* =========================
+   WIDGETS
+========================= */
+function pad2(n) { return String(n).padStart(2, "0"); }
 
 function renderClockWidget() {
   const clockEl = document.getElementById("widget-clock");
@@ -193,25 +150,18 @@ function renderClockWidget() {
   clockEl.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
   dayEl.textContent = now.toLocaleDateString(undefined, { weekday: "long" });
   dateEl.textContent = now.toLocaleDateString(undefined, {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+    day: "2-digit", month: "short", year: "numeric",
   });
 }
-
-/* --------------------------- Widgets (Break Ring) ------------------------ */
 
 function setRing(percent) {
   const p = Math.max(0, Math.min(100, Math.round(percent)));
   const ring = document.getElementById("ring-progress");
   const label = document.getElementById("ring-label");
   if (!ring || !label) return;
-
   ring.setAttribute("stroke-dasharray", `${p}, 100`);
   label.textContent = `${p}%`;
 }
-
-/* --------------------------- Widgets (Work target box) ------------------- */
 
 function updateWorkUI(workedMin) {
   const used = Math.max(0, Math.floor(workedMin));
@@ -220,23 +170,23 @@ function updateWorkUI(workedMin) {
   const workText = document.getElementById("work-text");
   const targetText = document.getElementById("work-target-text");
   const remainingText = document.getElementById("work-remaining-text");
-
   if (workText) workText.textContent = formatDuration(used);
   if (targetText) targetText.textContent = formatDuration(WORK_TARGET_MIN);
   if (remainingText) remainingText.textContent = formatDuration(remaining);
 
-  const pct =
-    WORK_TARGET_MIN > 0 ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100)) : 0;
+  const pct = WORK_TARGET_MIN > 0
+    ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100))
+    : 0;
 
   const ring = document.getElementById("work-ring-progress");
   const label = document.getElementById("work-ring-label");
-
   if (ring) ring.setAttribute("stroke-dasharray", `${pct}, 100`);
   if (label) label.textContent = `${pct}%`;
 }
 
-/* --------------------------- Widgets (Mini Calendar) --------------------- */
-
+/* =========================
+   MINI CALENDAR
+========================= */
 let calRef = new Date();
 
 function monthTitle(d) {
@@ -253,9 +203,8 @@ function buildMiniCalendar() {
 
   const year = calRef.getFullYear();
   const month = calRef.getMonth();
-
   const first = new Date(year, month, 1);
-  const startDay = (first.getDay() + 6) % 7; // 0=Mon ... 6=Sun
+  const startDay = (first.getDay() + 6) % 7; // Mon=0
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const prevDays = new Date(year, month, 0).getDate();
 
@@ -265,7 +214,6 @@ function buildMiniCalendar() {
   for (let i = 0; i < 42; i++) {
     const cell = document.createElement("div");
     cell.className = "mini-day";
-
     const dayNum = i - startDay + 1;
 
     if (dayNum <= 0) {
@@ -278,7 +226,6 @@ function buildMiniCalendar() {
       cell.textContent = String(dayNum);
       if (isThisMonth && dayNum === today.getDate()) cell.classList.add("today");
     }
-
     gridEl.appendChild(cell);
   }
 }
@@ -288,27 +235,21 @@ function hookCalendarButtons() {
   const next = document.getElementById("cal-next");
   if (!prev || !next) return;
 
-  // avoid stacking handlers if DOM reloaded
-  prev.onclick = null;
-  next.onclick = null;
-
   prev.onclick = () => {
     calRef = new Date(calRef.getFullYear(), calRef.getMonth() - 1, 1);
     buildMiniCalendar();
   };
-
   next.onclick = () => {
     calRef = new Date(calRef.getFullYear(), calRef.getMonth() + 1, 1);
     buildMiniCalendar();
   };
 }
 
-/* --------------------------- Live usage math ---------------------------- */
-
+/* =========================
+   LIVE USAGE
+========================= */
 function recomputeLiveUsage(nowMs) {
-  if (!state) {
-    return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
-  }
+  if (!state) return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
 
   const elapsedMin = (nowMs - state.lastStatusChange) / 60000;
 
@@ -319,21 +260,11 @@ function recomputeLiveUsage(nowMs) {
   let unav = state.unavailableMinutes || 0;
 
   switch (state.status) {
-    case "in_operation":
-      op += elapsedMin;
-      break;
-    case "break":
-      br += elapsedMin;
-      break;
-    case "meeting":
-      meet += elapsedMin;
-      break;
-    case "handling":
-      hand += elapsedMin;
-      break;
-    case "unavailable":
-      unav += elapsedMin;
-      break;
+    case "in_operation": op += elapsedMin; break;
+    case "break": br += elapsedMin; break;
+    case "meeting": meet += elapsedMin; break;
+    case "handling": hand += elapsedMin; break;
+    case "unavailable": unav += elapsedMin; break;
   }
 
   if (br > BREAK_LIMIT_MIN) br = BREAK_LIMIT_MIN;
@@ -343,36 +274,25 @@ function recomputeLiveUsage(nowMs) {
 
 function applyElapsedToState(nowMs) {
   if (!state) return;
-
   const elapsedMin = (nowMs - state.lastStatusChange) / 60000;
   if (elapsedMin <= 0) return;
 
   switch (state.status) {
-    case "in_operation":
-      state.operationMinutes += elapsedMin;
-      break;
-    case "break":
-      state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin);
-      break;
-    case "meeting":
-      state.meetingMinutes += elapsedMin;
-      break;
-    case "handling":
-      state.handlingMinutes += elapsedMin;
-      break;
-    case "unavailable":
-      state.unavailableMinutes += elapsedMin;
-      break;
+    case "in_operation": state.operationMinutes += elapsedMin; break;
+    case "break": state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin); break;
+    case "meeting": state.meetingMinutes += elapsedMin; break;
+    case "handling": state.handlingMinutes += elapsedMin; break;
+    case "unavailable": state.unavailableMinutes += elapsedMin; break;
   }
 
   state.lastStatusChange = nowMs;
 }
 
-/* --------------------------- Firestore sync ----------------------------- */
-
+/* =========================
+   FIRESTORE SYNC
+========================= */
 async function syncStateToFirestore(live) {
   if (!currentUser || !state) return;
-
   const today = state.day || getTodayKey();
   const id = `${today}_${currentUser.id}`;
   const usage = live || recomputeLiveUsage(Date.now());
@@ -401,7 +321,6 @@ function subscribeSupervisorDashboard() {
   if (supUnsub) return;
 
   const q = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
-
   supUnsub = onSnapshot(q, (snapshot) => {
     const rows = [];
     snapshot.forEach((d) => rows.push(d.data()));
@@ -409,8 +328,9 @@ function subscribeSupervisorDashboard() {
   });
 }
 
-/* --------------------------- Local storage ------------------------------ */
-
+/* =========================
+   LOCAL STORAGE
+========================= */
 function saveState() {
   if (!state) return;
   localStorage.setItem(STATE_KEY, JSON.stringify(state));
@@ -419,7 +339,6 @@ function saveState() {
 function loadStateForToday(userId) {
   const raw = localStorage.getItem(STATE_KEY);
   if (!raw) return null;
-
   try {
     const s = JSON.parse(raw);
     if (s && s.userId === userId && s.day === getTodayKey()) return s;
@@ -427,119 +346,62 @@ function loadStateForToday(userId) {
   return null;
 }
 
-/* ------------------------- Floating Chat Shell -------------------------- */
-/**
- * This file only handles open/close + visibility rules.
- * messages.js will handle Firestore + content.
- */
-
+/* =========================
+   FLOATING CHAT (SHELL ONLY)
+========================= */
 function closeFloatingChat() {
-  const panel = document.getElementById("float-chat-panel");
-  if (panel) panel.classList.add("hidden");
+  document.getElementById("float-chat-panel")?.classList.add("hidden");
 }
-
-function openFloatingChat() {
-  const panel = document.getElementById("float-chat-panel");
-  if (!panel) return;
-  panel.classList.remove("hidden");
-}
-
 function toggleFloatingChat() {
   if (!currentUser) return;
   const panel = document.getElementById("float-chat-panel");
   if (!panel) return;
-  const isHidden = panel.classList.contains("hidden");
-  if (isHidden) openFloatingChat();
-  else closeFloatingChat();
+  panel.classList.toggle("hidden");
 }
-
-function hookFloatingChatUI() {
-  if (floatUIHooked) return;
-  floatUIHooked = true;
-
+function hookFloatingChatShell() {
   const toggleBtn = document.getElementById("float-chat-toggle");
   const closeBtn = document.getElementById("float-chat-close");
   const panel = document.getElementById("float-chat-panel");
 
-  toggleBtn?.addEventListener("click", () => {
-    if (!currentUser) return;
-    toggleFloatingChat();
-  });
+  toggleBtn?.addEventListener("click", () => toggleFloatingChat());
+  closeBtn?.addEventListener("click", () => closeFloatingChat());
 
-  closeBtn?.addEventListener("click", () => {
-    closeFloatingChat();
-  });
-
-  // Click outside panel closes it
+  // outside click closes
   document.addEventListener("mousedown", (e) => {
     if (!panel || panel.classList.contains("hidden")) return;
     if (panel.contains(e.target)) return;
-
     if (toggleBtn && (e.target === toggleBtn || toggleBtn.contains(e.target))) return;
-
     closeFloatingChat();
   });
 
-  // ESC closes it
+  // ESC closes
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeFloatingChat();
   });
 
-  // If user changes (login/logout) close it
-  window.addEventListener("telesyriana:user-changed", () => {
-    closeFloatingChat();
-  });
+  // on user changed close
+  window.addEventListener("telesyriana:user-changed", () => closeFloatingChat());
 }
 
-/* --------------------------- UI init ------------------------------------ */
+/* =========================
+   PAGES SWITCHING
+========================= */
+function forceEnableMessagesInputIfLoggedIn() {
+  // fallback only (messages.js should manage this)
+  if (!currentUser) return;
+  const page = document.getElementById("page-messages");
+  if (!page || page.classList.contains("hidden")) return;
 
-document.addEventListener("DOMContentLoaded", () => {
-  if (appInited) return;
-  appInited = true;
+  const input = document.getElementById("chat-input");
+  const form = document.getElementById("chat-form");
+  const btn = form?.querySelector(".chat-send-btn");
 
-  // ✅ block phones
-  if (!ensureAllowedDeviceOrBlock()) return;
-
-  // ✅ nav buttons
-  document.querySelectorAll(".nav-link").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      const page = btn.dataset.page;
-      if (!page) return; // ignore logout
-      e.preventDefault();
-      switchPage(page);
-    });
-  });
-
-  document.getElementById("login-form")?.addEventListener("submit", handleLogin);
-  document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
-  document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
-  document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
-
-  hookFloatingChatUI();
-
-  // restore session
-  const savedUser = localStorage.getItem(USER_KEY);
-  if (savedUser) {
-    try {
-      const u = JSON.parse(savedUser);
-      if (u?.id && USERS[u.id]) {
-        currentUser = u;
-        initStateForUser().then(() => {
-          showDashboard();
-        });
-        return;
-      }
-    } catch {}
-  }
-
-  showLogin();
-});
-
-/* -------------------------- Pages switching ----------------------------- */
+  if (input) input.disabled = false;
+  if (btn) btn.disabled = false;
+}
 
 function switchPage(pageId) {
   document.querySelectorAll(".page-section").forEach((pg) => pg.classList.add("hidden"));
-
   const target = document.getElementById(`page-${pageId}`);
   if (!target) {
     console.warn(`Page not found: page-${pageId}. Check your HTML IDs.`);
@@ -547,12 +409,10 @@ function switchPage(pageId) {
   }
   target.classList.remove("hidden");
 
-  // activate nav
   document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.page === pageId);
   });
 
-  // floating chat toggle visibility rules
   const floatToggle = document.getElementById("float-chat-toggle");
   if (floatToggle) {
     if (!currentUser || pageId === "messages") {
@@ -562,9 +422,22 @@ function switchPage(pageId) {
       floatToggle.classList.remove("hidden");
     }
   }
+
+  // ✅ fallback: if logged-in and on messages, ensure input is enabled
+  if (pageId === "messages") {
+    setTimeout(forceEnableMessagesInputIfLoggedIn, 50);
+  }
 }
 
-/* -------------------------- Login / Logout ------------------------------ */
+/* =========================
+   LOGIN / LOGOUT
+========================= */
+function showError(msg) {
+  const box = document.getElementById("login-error");
+  if (!box) return;
+  box.textContent = msg;
+  box.classList.remove("hidden");
+}
 
 function handleLogin(e) {
   e.preventDefault();
@@ -578,63 +451,60 @@ function handleLogin(e) {
   currentUser = { id, name: USERS[id].name, role: USERS[id].role };
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
 
-  // notify messages.js
-  window.dispatchEvent(new Event("telesyriana:user-changed"));
-
   document.getElementById("login-error")?.classList.add("hidden");
 
-  initStateForUser().then(() => {
-    showDashboard();
-  });
+  // ✅ important: let messages.js re-read user and enable chat
+  notifyUserChanged();
+
+  initStateForUser()
+    .then(showDashboard)
+    .catch((err) => alert("Init error: " + (err?.message || err)));
 }
 
 async function handleLogout() {
-  closeFloatingChat();
+  try {
+    closeFloatingChat();
 
-  if (currentUser && state) {
-    const now = Date.now();
-    applyElapsedToState(now);
-    state.status = "unavailable";
-    state.lastStatusChange = now;
-    saveState();
-    await syncStateToFirestore(recomputeLiveUsage(now));
+    if (currentUser && state) {
+      const now = Date.now();
+      applyElapsedToState(now);
+      state.status = "unavailable";
+      state.lastStatusChange = now;
+      saveState();
+      await syncStateToFirestore(recomputeLiveUsage(now));
+    }
+
+    localStorage.removeItem(USER_KEY);
+
+    if (timerId) clearInterval(timerId);
+    timerId = null;
+
+    if (clockIntervalId) clearInterval(clockIntervalId);
+    clockIntervalId = null;
+
+    if (supUnsub) supUnsub();
+    supUnsub = null;
+
+    currentUser = null;
+    state = null;
+
+    // ✅ notify after logout too
+    notifyUserChanged();
+    showLogin();
+  } catch (err) {
+    alert("Logout error: " + (err?.message || err));
   }
-
-  localStorage.removeItem(USER_KEY);
-
-  window.dispatchEvent(new Event("telesyriana:user-changed"));
-
-  if (timerId) clearInterval(timerId);
-  timerId = null;
-
-  if (clockIntervalId) clearInterval(clockIntervalId);
-  clockIntervalId = null;
-
-  if (supUnsub) supUnsub();
-  supUnsub = null;
-
-  currentUser = null;
-  state = null;
-
-  showLogin();
 }
 
-function showError(msg) {
-  const box = document.getElementById("login-error");
-  if (!box) return;
-  box.textContent = msg;
-  box.classList.remove("hidden");
-}
-
-/* --------------------- Status change (FIX) ------------------------------ */
-
+/* =========================
+   STATUS CHANGE
+========================= */
 async function handleStatusChange(e) {
   if (!state || !currentUser) return;
 
   const newStatus = e.target.value;
   const now = Date.now();
 
-  // break limit reached
   if (newStatus === "break" && state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01) {
     alert("Daily break limit (45 minutes) already reached.");
     e.target.value = state.status;
@@ -642,18 +512,22 @@ async function handleStatusChange(e) {
   }
 
   applyElapsedToState(now);
-
   state.status = newStatus;
   state.lastStatusChange = now;
   saveState();
 
-  const live = recomputeLiveUsage(now);
-  await syncStateToFirestore(live);
-  updateDashboardUI();
+  try {
+    const live = recomputeLiveUsage(now);
+    await syncStateToFirestore(live);
+    updateDashboardUI();
+  } catch (err) {
+    alert("Status update failed: " + (err?.message || err));
+  }
 }
 
-/* ---------------------------- Init Session ------------------------------ */
-
+/* =========================
+   INIT SESSION
+========================= */
 async function initStateForUser() {
   const today = getTodayKey();
   const now = Date.now();
@@ -707,7 +581,7 @@ function finishInit(now) {
 
   if (currentUser.role === "supervisor") subscribeSupervisorDashboard();
 
-  loadUserProfile();
+  loadUserProfile().catch(() => {});
   startTimer();
 
   const live = recomputeLiveUsage(now);
@@ -720,11 +594,14 @@ function finishInit(now) {
   buildMiniCalendar();
   hookCalendarButtons();
 
-  syncStateToFirestore(live);
+  syncStateToFirestore(live).catch((err) => {
+    console.warn("Initial sync failed:", err);
+  });
 }
 
-/* ----------------------------- Timer ------------------------------------ */
-
+/* =========================
+   TIMER
+========================= */
 function startTimer() {
   if (timerId) clearInterval(timerId);
   timerId = setInterval(tick, 10000);
@@ -732,7 +609,7 @@ function startTimer() {
 }
 
 async function tick() {
-  if (!state) return;
+  if (!state || !currentUser) return;
 
   const now = Date.now();
   const live = recomputeLiveUsage(now);
@@ -743,21 +620,22 @@ async function tick() {
     state.lastStatusChange = now;
     saveState();
     alert("Break limit reached. Status set to Unavailable.");
-
-    await syncStateToFirestore(recomputeLiveUsage(now));
-    updateDashboardUI();
-    return;
   }
 
   updateBreakUI(live.breakUsed);
   updateStatusMinutesUI(live);
   updateWorkUI(computeWorkedMinutes(live));
 
-  await syncStateToFirestore(live);
+  try {
+    await syncStateToFirestore(live);
+  } catch (err) {
+    console.warn("Sync failed:", err);
+  }
 }
 
-/* ------------------------- Dashboard UI --------------------------------- */
-
+/* =========================
+   DASHBOARD UI
+========================= */
 function updateDashboardUI() {
   if (!currentUser || !state) return;
 
@@ -775,7 +653,6 @@ function updateDashboardUI() {
     statusValue.textContent = statusLabel(state.status);
     statusValue.className = `status-value status-${state.status}`;
   }
-
   if (statusSelect) statusSelect.value = state.status;
 
   const live = recomputeLiveUsage(Date.now());
@@ -791,10 +668,8 @@ function updateBreakUI(used) {
   const usedMin = Math.floor(used);
   const remaining = Math.max(0, BREAK_LIMIT_MIN - usedMin);
 
-  const usedEl = document.getElementById("break-used");
-  const remEl = document.getElementById("break-remaining");
-  if (usedEl) usedEl.textContent = usedMin;
-  if (remEl) remEl.textContent = remaining;
+  document.getElementById("break-used") && (document.getElementById("break-used").textContent = usedMin);
+  document.getElementById("break-remaining") && (document.getElementById("break-remaining").textContent = remaining);
 
   const breakText = document.getElementById("break-text");
   if (breakText) breakText.textContent = `${usedMin} / ${BREAK_LIMIT_MIN}`;
@@ -812,8 +687,9 @@ function updateStatusMinutesUI(live) {
   if (handEl) handEl.textContent = formatDuration(live.handling);
 }
 
-/* -------------------------- Supervisor Table ---------------------------- */
-
+/* =========================
+   SUPERVISOR TABLE
+========================= */
 function buildSupervisorTableFromFirestore(rows) {
   const body = document.getElementById("sup-table-body");
   if (!body) return;
@@ -853,14 +729,13 @@ function buildSupervisorTableFromFirestore(rows) {
   if (sumUnavail) sumUnavail.textContent = totals.unavailable || 0;
 }
 
-/* ----------------------------- Settings --------------------------------- */
-
+/* =========================
+   SETTINGS
+========================= */
 function applyTheme(gender) {
   const g = String(gender || "").toLowerCase().trim();
   document.body.removeAttribute("data-theme");
-  if (g === "male" || g === "female") {
-    document.body.setAttribute("data-theme", g);
-  }
+  if (g === "male" || g === "female") document.body.setAttribute("data-theme", g);
 }
 
 async function loadUserProfile() {
@@ -900,14 +775,7 @@ async function handleSettingsSave(e) {
 
   await setDoc(
     ref,
-    {
-      userId: currentUser.id,
-      name: currentUser.name,
-      birthday,
-      notes,
-      gender,
-      updatedAt: serverTimestamp(),
-    },
+    { userId: currentUser.id, name: currentUser.name, birthday, notes, gender, updatedAt: serverTimestamp() },
     { merge: true }
   );
 
@@ -915,16 +783,15 @@ async function handleSettingsSave(e) {
   alert("Settings saved successfully.");
 }
 
-/* --------------------------- View switching ----------------------------- */
-
+/* =========================
+   VIEW SWITCHING
+========================= */
 function showLogin() {
   document.getElementById("dashboard-screen")?.classList.add("hidden");
   document.getElementById("login-screen")?.classList.remove("hidden");
   document.getElementById("main-nav")?.classList.add("hidden");
 
-  const floatToggle = document.getElementById("float-chat-toggle");
-  if (floatToggle) floatToggle.classList.add("hidden");
-
+  document.getElementById("float-chat-toggle")?.classList.add("hidden");
   closeFloatingChat();
 
   if (clockIntervalId) clearInterval(clockIntervalId);
@@ -943,7 +810,54 @@ function showDashboard() {
   buildMiniCalendar();
   hookCalendarButtons();
 
-  if (!clockIntervalId) {
-    clockIntervalId = setInterval(renderClockWidget, 1000);
-  }
+  if (!clockIntervalId) clockIntervalId = setInterval(renderClockWidget, 1000);
 }
+
+/* =========================
+   BOOT
+========================= */
+document.addEventListener("DOMContentLoaded", () => {
+  if (appInited) return;
+  appInited = true;
+
+  if (!ensureAllowedDeviceOrBlock()) return;
+
+  document.querySelectorAll(".nav-link").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const page = btn.dataset.page;
+      if (!page) return;
+      e.preventDefault();
+      switchPage(page);
+    });
+  });
+
+  document.getElementById("login-form")?.addEventListener("submit", handleLogin);
+  document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
+  document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
+  document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
+
+  hookFloatingChatShell();
+
+  // ✅ restore session
+  const savedUser = localStorage.getItem(USER_KEY);
+  if (savedUser) {
+    try {
+      const u = JSON.parse(savedUser);
+      if (u?.id && USERS[u.id]) {
+        currentUser = u;
+
+        // ✅ IMPORTANT: tell messages.js we have a user (enables send)
+        notifyUserChanged();
+
+        initStateForUser()
+          .then(showDashboard)
+          .catch((err) => alert("Restore init error: " + (err?.message || err)));
+        return;
+      }
+    } catch {}
+  }
+
+  showLogin();
+});
+
+
