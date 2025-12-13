@@ -879,6 +879,140 @@ input:focus, textarea:focus{
   .messages-sidebar{ width:100%; border-right:none; border-bottom:1px solid var(--line); }
 }
 
+/* =========================
+   Tasks (Trello-like)
+========================= */
+.tasks-top{
+  display:flex;
+  gap:14px;
+  align-items:flex-start;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  margin-bottom:14px;
+}
+
+.task-add{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.task-add input{
+  width:240px;
+  max-width:70vw;
+  border-radius:999px;
+}
+
+.task-add select{
+  padding:9px 10px;
+  border-radius:999px;
+  border:1px solid #d0d0d0;
+  outline:none;
+}
+
+.kanban{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:12px;
+}
+
+.kanban-col{
+  background:#fafafa;
+  border:1px solid #f0f0f0;
+  border-radius:16px;
+  padding:10px;
+  min-height:320px;
+}
+
+.kanban-head{
+  font-weight:900;
+  font-size:13px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:10px;
+  color:#444;
+}
+
+.count{
+  background:#fff;
+  border:1px solid #eee;
+  border-radius:999px;
+  padding:3px 8px;
+  font-size:12px;
+  color:#777;
+}
+
+.kanban-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  min-height:240px;
+  padding-bottom:8px;
+}
+
+.task-card{
+  background:#fff;
+  border:1px solid #eee;
+  border-radius:14px;
+  padding:10px 10px;
+  box-shadow:0 10px 22px rgba(0,0,0,.06);
+  cursor:grab;
+}
+
+.task-card:active{ cursor:grabbing; }
+
+.task-row{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.task-title{
+  font-weight:800;
+  font-size:13px;
+  color:#222;
+  line-height:1.3;
+  word-break:break-word;
+}
+
+.task-actions{
+  display:flex;
+  gap:6px;
+  align-items:center;
+}
+
+.task-btn{
+  border:none;
+  background:#f3f3f3;
+  border-radius:10px;
+  padding:6px 8px;
+  cursor:pointer;
+  font-weight:900;
+}
+.task-btn:hover{ background:#eee; }
+
+.task-meta{
+  margin-top:6px;
+  font-size:11px;
+  color:#777;
+}
+
+/* drop highlight */
+.kanban-list.drag-over{
+  outline:2px dashed rgba(255,44,139,.35);
+  outline-offset:6px;
+  border-radius:12px;
+}
+
+/* Responsive */
+@media (max-width:900px){
+  .kanban{ grid-template-columns:1fr; }
+  .kanban-col{ min-height:240px; }
+}
+
 
 
 
