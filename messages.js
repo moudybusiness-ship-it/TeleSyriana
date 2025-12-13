@@ -144,13 +144,17 @@ function setEmptyState(emptyEl, listEl, on) {
   emptyEl.style.display = on ? "block" : "none";
   listEl.style.display = on ? "none" : "flex";
 }
-
 function setInputEnabled(formEl, inputEl, enabled) {
   if (!formEl || !inputEl) return;
-  const btn = formEl.querySelector("button[type='submit'], button");
+
+  const btn =
+    formEl.querySelector(".chat-send-btn") ||
+    formEl.querySelector("#float-send-btn");
+
   inputEl.disabled = !enabled;
   if (btn) btn.disabled = !enabled;
 }
+
 
 function ensureTopLoader(listEl, id = "chat-top-loader") {
   if (!listEl) return null;
@@ -1024,3 +1028,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // login/logout without refresh
 window.addEventListener("telesyriana:user-changed", handleUserChanged);
+
