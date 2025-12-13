@@ -1,11 +1,23 @@
 /* =========================
+   TeleSyriana — style.css (FULL)
+   - Pink theme (Female) default
+   - Blue theme (Male) ready via CSS variables
+   - Floating chat button fix (z-index + click)
+========================= */
+
+/* =========================
    Reset & base
 ========================= */
 *,
 *::before,
 *::after { box-sizing: border-box; }
 
+html, body { height: 100%; }
+
 :root{
+  /* =========================
+     THEME (Female default)
+     ========================= */
   --pink:#ff2c8b;
   --pink2:#ff5db6;
   --bg1:#ff2c8b;
@@ -20,8 +32,29 @@
 
   --msg-in:#f1f1f1;
   --shadow:0 16px 30px rgba(0,0,0,.18);
+
+  /* layout helper */
+  --header-offset: 120px;
 }
 
+/* =========================
+   Male theme (Blue) — READY
+   الاستخدام لاحقاً:
+   - على <body> حط: class="theme-male"
+   أو
+   - على <html> حط: data-theme="male"
+========================= */
+body.theme-male,
+html[data-theme="male"]{
+  --pink:#2f7bff;     /* accent 1 */
+  --pink2:#58b7ff;    /* accent 2 */
+  --bg1:#0b2a6d;      /* background 1 */
+  --bg2:#2f7bff;      /* background 2 */
+}
+
+/* =========================
+   Body
+========================= */
 body{
   margin:0;
   padding:0;
@@ -273,7 +306,6 @@ input:focus, textarea:focus{
   gap:10px;
 }
 
-
 .time-box{
   background:#f7f7f7;
   border-radius:10px;
@@ -285,7 +317,7 @@ input:focus, textarea:focus{
   gap:4px;
 }
 
-/* ===== Widgets Grid (like sample) ===== */
+/* ===== Widgets Grid ===== */
 .widgets-grid{
   display:grid;
   grid-template-columns: 1fr 1fr;
@@ -336,10 +368,7 @@ input:focus, textarea:focus{
   color:#888;
 }
 
-/* Calendar widget spans full row like sample */
-.widget-calendar{
-  grid-column: 1 / -1;
-}
+.widget-calendar{ grid-column: 1 / -1; }
 
 .cal-nav{
   display:flex;
@@ -444,7 +473,7 @@ input:focus, textarea:focus{
 
 .ring-text .widget-big{ font-size:12px; }
 
-/* Mobile */
+/* Mobile widgets */
 @media (max-width:768px){
   .widgets-grid{ grid-template-columns: 1fr; }
   .widget-calendar{ grid-column:auto; }
@@ -590,7 +619,7 @@ input:focus, textarea:focus{
 .chat-avatar.role-ai{ background:#6b4cff; }
 .chat-avatar.role-room{ background:#9aa0a6; }
 
-/* ✅ NEW: iOS dot attached to avatar (DM list) */
+/* iOS dot attached to avatar (DM list) */
 .dm-avatar-wrap{
   position:relative;
   width:32px;
@@ -679,7 +708,7 @@ input:focus, textarea:focus{
 }
 .chat-message.me .msg-avatar{ background:var(--pink); }
 
-/* iOS dot on message avatar (optional - if your JS adds it) */
+/* optional status dot on avatar */
 .avatar-status-dot{
   position:absolute;
   bottom:-2px;
@@ -699,7 +728,7 @@ input:focus, textarea:focus{
   gap:4px;
   min-width:0;
   max-width:70%;
-  font-size: 13px;
+  font-size:13px;
 }
 
 /* name beside avatar */
@@ -724,10 +753,10 @@ input:focus, textarea:focus{
   color:#222;
   white-space:pre-wrap;
   word-wrap:break-word;
-  font-size: 13px;
+  font-size:13px;
 }
 
-/* my messages: pink */
+/* my messages */
 .chat-message.me .chat-message-text{
   background:linear-gradient(135deg,var(--pink),var(--pink2));
   color:#fff;
@@ -767,12 +796,14 @@ input:focus, textarea:focus{
 }
 
 /* =========================
-   Floating chat
+   Floating chat (FIXED)
+   - Always clickable
+   - Always on top
 ========================= */
 .floating-chat-toggle{
-  position:fixed;
-  bottom:18px;
-  right:18px;
+  position:fixed !important;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
   width:52px;
   height:52px;
   border-radius:50%;
@@ -785,13 +816,20 @@ input:focus, textarea:focus{
   align-items:center;
   justify-content:center;
   box-shadow:0 12px 24px rgba(0,0,0,.25);
-  z-index:1000;
+  z-index:99999;              /* ✅ أعلى من أي overlay */
+  pointer-events:auto;        /* ✅ لو في طبقة فوقه */
+  user-select:none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.floating-chat-toggle:active{
+  transform: scale(.98);
 }
 
 .floating-chat-panel{
-  position:fixed;
-  bottom:80px;
-  right:18px;
+  position:fixed !important;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 62px);
   width:320px;
   max-width:90vw;
   background:#fff;
@@ -800,7 +838,8 @@ input:focus, textarea:focus{
   display:flex;
   flex-direction:column;
   overflow:hidden;
-  z-index:1000;
+  z-index:99999;              /* ✅ أعلى من كلشي */
+  pointer-events:auto;
 }
 
 .floating-chat-header{
@@ -880,7 +919,7 @@ input:focus, textarea:focus{
 }
 
 /* =========================
-   Tasks (Trello-like) — UPDATED
+   Tasks (Trello-like)
 ========================= */
 .tasks-top{
   display:flex;
@@ -912,11 +951,8 @@ input:focus, textarea:focus{
   font-size:13px;
 }
 
-.task-add button{
-  border-radius:999px;
-}
+.task-add button{ border-radius:999px; }
 
-/* Board */
 .kanban{
   display:grid;
   grid-template-columns:repeat(3, 1fr);
@@ -958,7 +994,6 @@ input:focus, textarea:focus{
   padding-bottom:8px;
 }
 
-/* Card */
 .task-card{
   background:#fff;
   border:1px solid #eee;
@@ -977,13 +1012,11 @@ input:focus, textarea:focus{
 
 .task-card:active{ cursor:grabbing; }
 
-/* optional: while dragging */
 .task-card.dragging{
   opacity:.65;
   transform:scale(.98);
 }
 
-/* Card header row */
 .task-row{
   display:flex;
   align-items:flex-start;
@@ -1022,7 +1055,6 @@ input:focus, textarea:focus{
   line-height:1.35;
 }
 
-/* ✅ Image preview inside task card (used by tasks.js) */
 .task-thumb{
   margin-top:8px;
   width:100%;
@@ -1032,21 +1064,19 @@ input:focus, textarea:focus{
   border:1px solid #eee;
 }
 
-/* Drop highlight */
 .kanban-list.drag-over{
   outline:2px dashed rgba(255,44,139,.35);
   outline-offset:6px;
   border-radius:12px;
 }
 
-/* Responsive */
 @media (max-width:900px){
   .kanban{ grid-template-columns:1fr; }
   .kanban-col{ min-height:240px; }
 }
 
 /* =========================
-   Modal (Tasks) — REQUIRED for popup
+   Modal (Tasks)
 ========================= */
 .modal{
   position:fixed;
@@ -1092,9 +1122,7 @@ input:focus, textarea:focus{
   line-height:1;
 }
 
-.modal-body{
-  padding:14px 14px 12px;
-}
+.modal-body{ padding:14px 14px 12px; }
 
 .modal-actions{
   display:flex;
@@ -1103,13 +1131,9 @@ input:focus, textarea:focus{
   margin-top:10px;
 }
 
-
 /* =========================
    Messages Sidebar — Glass + Search + Recent (OVERRIDE)
-   Put this at END of style.css
 ========================= */
-
-/* sidebar glass */
 .messages-sidebar.glass{
   background: rgba(255,255,255,.28) !important;
   border: 1px solid rgba(255,255,255,.45);
@@ -1118,10 +1142,9 @@ input:focus, textarea:focus{
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 18px 40px rgba(0,0,0,.08);
   overflow: hidden;
-  padding: 0 !important; /* we handle padding inside */
+  padding: 0 !important;
 }
 
-/* top section */
 .ms-top{
   padding: 12px 12px 10px;
   border-bottom: 1px solid rgba(255,255,255,.35);
@@ -1134,7 +1157,6 @@ input:focus, textarea:focus{
   font-size: 14px;
 }
 
-/* search */
 .ms-search{ position: relative; }
 .ms-search input{
   width: 100%;
@@ -1160,7 +1182,6 @@ input:focus, textarea:focus{
   font-weight: 900;
 }
 
-/* headings inside glass */
 .messages-sidebar.glass .messages-sidebar-header{
   padding: 10px 12px 6px;
   margin: 0 !important;
@@ -1168,7 +1189,6 @@ input:focus, textarea:focus{
   font-weight: 900;
 }
 
-/* lists containers */
 .ms-list{
   display: flex;
   flex-direction: column;
@@ -1184,14 +1204,13 @@ input:focus, textarea:focus{
   opacity: .8;
 }
 
-/* clean cards for room/dm */
 .messages-sidebar.glass .chat-room,
 .messages-sidebar.glass .chat-dm{
   background: rgba(255,255,255,.55) !important;
   border: 1px solid rgba(0,0,0,.06) !important;
   border-radius: 14px !important;
   padding: 10px !important;
-  margin: 0 !important; /* remove old margin-bottom */
+  margin: 0 !important;
   transition: transform .08s ease, background .15s ease, box-shadow .15s ease;
 }
 
@@ -1205,103 +1224,82 @@ input:focus, textarea:focus{
   transform: scale(.99);
 }
 
-/* active highlight (بدل .active القديم) */
 .chat-item-active{
   background: rgba(255,255,255,.92) !important;
   border-color: rgba(255,44,139,.35) !important;
   box-shadow: 0 10px 22px rgba(255,44,139,.12);
 }
 
-/* keep old .active working too */
 .messages-sidebar.glass .chat-room.active,
 .messages-sidebar.glass .chat-dm.active{
   background: rgba(255,255,255,.92) !important;
   border-color: rgba(255,44,139,.35) !important;
 }
 
-/* sidebar layout fixes (so it looks modern) */
-.messages-layout{
-  gap: 12px; /* nicer spacing */
-}
-.messages-card{
-  background: transparent;
-}
+.messages-layout{ gap: 12px; }
+.messages-card{ background: transparent; }
 .messages-main{
   border-radius: 18px;
   box-shadow: 0 18px 40px rgba(0,0,0,.08);
   border: 1px solid rgba(255,255,255,.55);
 }
 
-/* Small tweak for mobile */
 @media (max-width:768px){
   .messages-sidebar.glass{ border-radius: 18px; }
 }
 
 /* =========================
    FIX: Messages height + internal scroll
-   Put at END of style.css
 ========================= */
-
-:root{
-  /* عدّل الرقم إذا الهيدر عندك أكبر/أصغر */
-  --header-offset: 120px;
-}
-
-/* خلي صفحة messages ما تتمدّد */
 #page-messages{
   height: calc(100vh - var(--header-offset));
 }
 
-/* الكارد ياخد طول ثابت */
 #page-messages .messages-card{
   height: calc(100vh - var(--header-offset));
   display: flex;
 }
 
-/* المحتوى جوّا الكارد */
 #page-messages .messages-layout{
   height: 100%;
   width: 100%;
   display: flex;
-  overflow: hidden; /* مهم */
+  overflow: hidden;
 }
 
-/* الشات الرئيسي */
 #page-messages .messages-main{
   height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* مهم */
+  overflow: hidden;
 }
 
-/* هون لازم يصير السكروول */
 #chat-message-list{
   flex: 1;
-  min-height: 0;        /* مهم جداً مع flex */
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: 6px;
 }
 
-/* خلي الإدخال ثابت تحت */
 #chat-form{
   flex: 0 0 auto;
 }
 
-/* موبايل */
 @media (max-width:768px){
-  :root{ --header-offset: 170px; } /* لأن الهيدر بصفين غالباً */
+  :root{ --header-offset: 170px; }
   #page-messages,
   #page-messages .messages-card{
     height: calc(100vh - var(--header-offset));
   }
 }
 
-
-
-
-
-
-
-
-
+/* =========================
+   EXTRA: Make sure nothing blocks chat button clicks
+   (Some overlays/cards can accidentally catch clicks)
+========================= */
+.floating-chat-toggle,
+.floating-chat-panel,
+.floating-chat-panel *{
+  pointer-events: auto;
+}
