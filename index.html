@@ -16,7 +16,6 @@
         <button class="nav-link" data-page="home">Home</button>
         <button class="nav-link" data-page="tasks">Tasks</button>
         <button class="nav-link" data-page="messages">Messages</button>
-        <!-- <button class="nav-link" data-page="meetings">Meetings</button> -->
         <button class="nav-link" data-page="settings">Settings</button>
 
         <div class="actions">
@@ -151,7 +150,6 @@
 
             <div class="widgets-grid">
 
-              <!-- Clock -->
               <div class="widget-card">
                 <div class="widget-head">
                   <div class="widget-title">Clock</div>
@@ -161,7 +159,6 @@
                 <div id="widget-day" class="widget-sub">—</div>
               </div>
 
-              <!-- Today -->
               <div class="widget-card">
                 <div class="widget-head">
                   <div class="widget-title">Today</div>
@@ -171,7 +168,6 @@
                 <div class="widget-sub">Local date</div>
               </div>
 
-              <!-- Mini Calendar -->
               <div class="widget-card widget-calendar">
                 <div class="widget-head">
                   <div id="cal-title" class="widget-title">January, 2025</div>
@@ -189,7 +185,6 @@
                 </div>
               </div>
 
-              <!-- Break ring -->
               <div class="widget-card">
                 <div class="widget-head">
                   <div class="widget-title">Break</div>
@@ -215,7 +210,6 @@
                 </div>
               </div>
 
-              <!-- Hours worked ring -->
               <div class="widget-card">
                 <div class="widget-head">
                   <div class="widget-title">Hours worked</div>
@@ -249,7 +243,7 @@
         </div>
       </section>
 
-      <!-- ✅ TASKS PAGE -->
+      <!-- TASKS PAGE -->
       <section id="page-tasks" class="page-section hidden">
         <section class="card">
           <div class="tasks-top">
@@ -287,7 +281,7 @@
           </div>
         </section>
 
-        <!-- ✅ TASK MODAL -->
+        <!-- TASK MODAL -->
         <div id="task-modal" class="modal hidden">
           <div class="modal-backdrop" data-modal-close></div>
 
@@ -309,12 +303,11 @@
               </label>
 
               <label>
-  Image (optional)
-  <input id="task-modal-img" type="url" placeholder="Paste image URL (Copy link address)..." />
-  <small class="hint">Or upload from device:</small>
-  <input id="task-modal-file" type="file" accept="image/*" />
-</label>
-
+                Image (optional)
+                <input id="task-modal-img" type="url" placeholder="Paste image URL (Copy link address)..." />
+                <small class="hint">Or upload from device:</small>
+                <input id="task-modal-file" type="file" accept="image/*" />
+              </label>
 
               <label>
                 Column
@@ -334,136 +327,130 @@
         </div>
       </section>
 
-     <!-- SIDEBAR -->
-<aside class="messages-sidebar glass">
-  <div class="ms-top">
-    <div class="ms-title">Messages</div>
+      <!-- ✅ MESSAGES PAGE (THIS WAS THE BROKEN PART) -->
+      <section id="page-messages" class="page-section hidden">
+        <section class="card messages-card">
+          <div class="messages-layout">
 
-    <!-- Search -->
-    <div class="ms-search">
-      <input id="chat-search" type="text" placeholder="Search rooms & people…" autocomplete="off" />
-      <button id="chat-search-clear" type="button" class="ms-search-x" title="Clear">×</button>
-    </div>
-  </div>
+            <!-- SIDEBAR (must be inside messages-layout) -->
+            <aside class="messages-sidebar glass">
 
-  <!-- ROOMS -->
-  <div class="messages-sidebar-header">Rooms</div>
-  <div id="rooms-list" class="ms-list" data-list="rooms">
+              <div class="ms-top">
+                <div class="ms-title">Messages</div>
 
-    <button class="chat-room" data-room="general">
-      <div class="chat-row">
-        <div class="chat-avatar role-room">#</div>
-        <div class="chat-row-text">
-          <div class="chat-room-title">General chat</div>
-          <div class="chat-room-sub">All agents &amp; supervisors</div>
-        </div>
-      </div>
-    </button>
+                <div class="ms-search">
+                  <input id="chat-search" type="text" placeholder="Search name / room…" autocomplete="off" />
+                  <button id="chat-search-x" class="ms-search-x" type="button" title="Clear">×</button>
+                </div>
+              </div>
 
-    <button class="chat-room" data-room="supervisors">
-      <div class="chat-row">
-        <div class="chat-avatar role-supervisor">S</div>
-        <div class="chat-row-text">
-          <div class="chat-room-title">
-            Supervisors <span class="room-badge">Supervisor only</span>
-          </div>
-          <div class="chat-room-sub">Internal notes</div>
-        </div>
-      </div>
-    </button>
+              <div class="messages-sidebar-header">Rooms</div>
+              <div id="room-list" class="ms-list">
+                <button class="chat-room" data-room="general">
+                  <div class="chat-row">
+                    <div class="chat-avatar role-room">#</div>
+                    <div class="chat-row-text">
+                      <div class="chat-room-title">General chat</div>
+                      <div class="chat-room-sub">All agents &amp; supervisors</div>
+                    </div>
+                  </div>
+                </button>
 
-    <button class="chat-room" data-room="ai">
-      <div class="chat-row">
-        <div class="chat-avatar role-ai">AI</div>
-        <div class="chat-row-text">
-          <div class="chat-room-title">
-            ChatGPT 5 <span class="room-badge">Coming soon</span>
-          </div>
-          <div class="chat-room-sub">AI assistant room</div>
-        </div>
-      </div>
-    </button>
+                <button class="chat-room" data-room="supervisors">
+                  <div class="chat-row">
+                    <div class="chat-avatar role-supervisor">S</div>
+                    <div class="chat-row-text">
+                      <div class="chat-room-title">
+                        Supervisors <span class="room-badge">Supervisor only</span>
+                      </div>
+                      <div class="chat-room-sub">Internal notes</div>
+                    </div>
+                  </div>
+                </button>
 
-  </div>
+                <button class="chat-room" data-room="ai">
+                  <div class="chat-row">
+                    <div class="chat-avatar role-ai">AI</div>
+                    <div class="chat-row-text">
+                      <div class="chat-room-title">
+                        ChatGPT 5 <span class="room-badge">Coming soon</span>
+                      </div>
+                      <div class="chat-room-sub">AI assistant room</div>
+                    </div>
+                  </div>
+                </button>
+              </div>
 
-  <!-- RECENT (JS رح يعبيه) -->
-  <div class="messages-sidebar-header small">Recent</div>
-  <div id="recent-list" class="ms-list" data-list="recent">
-    <div class="ms-empty" id="recent-empty">No recent chats yet</div>
-  </div>
+              <div class="messages-sidebar-header small">Direct messages</div>
+              <div id="dm-list" class="ms-list">
 
-  <!-- DIRECT MESSAGES -->
-  <div class="messages-sidebar-header small">Direct messages</div>
-  <div id="dm-list" class="ms-list" data-list="dm">
+                <button class="chat-dm" data-dm="1001">
+                  <div class="chat-row">
+                    <div class="dm-avatar-wrap">
+                      <div class="chat-avatar role-agent" data-avatar="1001">A1</div>
+                      <span class="status-dot dot-offline" data-status-dot="1001"></span>
+                    </div>
+                    <div class="chat-row-text">
+                      <div class="chat-room-title" data-name="1001">Agent 01</div>
+                      <div class="chat-room-sub" data-sub="1001">Direct chat</div>
+                    </div>
+                  </div>
+                </button>
 
-    <button class="chat-dm" data-dm="1001">
-      <div class="chat-row">
-        <div class="dm-avatar-wrap">
-          <div class="chat-avatar role-agent" data-avatar="1001">A1</div>
-          <span class="status-dot dot-offline" data-status-dot="1001"></span>
-        </div>
-        <div class="chat-row-text">
-          <div class="chat-room-title" data-name="1001">Agent 01</div>
-          <div class="chat-room-sub" data-sub="1001">Direct chat</div>
-        </div>
-      </div>
-    </button>
+                <button class="chat-dm" data-dm="1002">
+                  <div class="chat-row">
+                    <div class="dm-avatar-wrap">
+                      <div class="chat-avatar role-agent" data-avatar="1002">A2</div>
+                      <span class="status-dot dot-offline" data-status-dot="1002"></span>
+                    </div>
+                    <div class="chat-row-text">
+                      <div class="chat-room-title" data-name="1002">Agent 02</div>
+                      <div class="chat-room-sub" data-sub="1002">Direct chat</div>
+                    </div>
+                  </div>
+                </button>
 
-    <button class="chat-dm" data-dm="1002">
-      <div class="chat-row">
-        <div class="dm-avatar-wrap">
-          <div class="chat-avatar role-agent" data-avatar="1002">A2</div>
-          <span class="status-dot dot-offline" data-status-dot="1002"></span>
-        </div>
-        <div class="chat-row-text">
-          <div class="chat-room-title" data-name="1002">Agent 02</div>
-          <div class="chat-room-sub" data-sub="1002">Direct chat</div>
-        </div>
-      </div>
-    </button>
+                <button class="chat-dm" data-dm="1003">
+                  <div class="chat-row">
+                    <div class="dm-avatar-wrap">
+                      <div class="chat-avatar role-agent" data-avatar="1003">A3</div>
+                      <span class="status-dot dot-offline" data-status-dot="1003"></span>
+                    </div>
+                    <div class="chat-row-text">
+                      <div class="chat-room-title" data-name="1003">Agent 03</div>
+                      <div class="chat-room-sub" data-sub="1003">Direct chat</div>
+                    </div>
+                  </div>
+                </button>
 
-    <button class="chat-dm" data-dm="1003">
-      <div class="chat-row">
-        <div class="dm-avatar-wrap">
-          <div class="chat-avatar role-agent" data-avatar="1003">A3</div>
-          <span class="status-dot dot-offline" data-status-dot="1003"></span>
-        </div>
-        <div class="chat-row-text">
-          <div class="chat-room-title" data-name="1003">Agent 03</div>
-          <div class="chat-room-sub" data-sub="1003">Direct chat</div>
-        </div>
-      </div>
-    </button>
+                <button class="chat-dm" data-dm="2001">
+                  <div class="chat-row">
+                    <div class="dm-avatar-wrap">
+                      <div class="chat-avatar role-supervisor" data-avatar="2001">SD</div>
+                      <span class="status-dot dot-offline" data-status-dot="2001"></span>
+                    </div>
+                    <div class="chat-row-text">
+                      <div class="chat-room-title" data-name="2001">Supervisor Dema</div>
+                      <div class="chat-room-sub" data-sub="2001">Direct chat</div>
+                    </div>
+                  </div>
+                </button>
 
-    <button class="chat-dm" data-dm="2001">
-      <div class="chat-row">
-        <div class="dm-avatar-wrap">
-          <div class="chat-avatar role-supervisor" data-avatar="2001">SD</div>
-          <span class="status-dot dot-offline" data-status-dot="2001"></span>
-        </div>
-        <div class="chat-row-text">
-          <div class="chat-room-title" data-name="2001">Supervisor Dema</div>
-          <div class="chat-room-sub" data-sub="2001">Direct chat</div>
-        </div>
-      </div>
-    </button>
+                <button class="chat-dm" data-dm="2002">
+                  <div class="chat-row">
+                    <div class="dm-avatar-wrap">
+                      <div class="chat-avatar role-supervisor" data-avatar="2002">SM</div>
+                      <span class="status-dot dot-offline" data-status-dot="2002"></span>
+                    </div>
+                    <div class="chat-row-text">
+                      <div class="chat-room-title" data-name="2002">Supervisor Moustafa</div>
+                      <div class="chat-room-sub" data-sub="2002">Direct chat</div>
+                    </div>
+                  </div>
+                </button>
 
-    <button class="chat-dm" data-dm="2002">
-      <div class="chat-row">
-        <div class="dm-avatar-wrap">
-          <div class="chat-avatar role-supervisor" data-avatar="2002">SM</div>
-          <span class="status-dot dot-offline" data-status-dot="2002"></span>
-        </div>
-        <div class="chat-row-text">
-          <div class="chat-room-title" data-name="2002">Supervisor Moustafa</div>
-          <div class="chat-room-sub" data-sub="2002">Direct chat</div>
-        </div>
-      </div>
-    </button>
-
-  </div>
-</aside>
-
+              </div>
+            </aside>
 
             <!-- CHAT AREA -->
             <div class="messages-main">
@@ -497,7 +484,7 @@
         </section>
       </section>
 
-      <!-- ✅ SETTINGS PAGE -->
+      <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
         <div class="card">
           <h2>Settings</h2>
@@ -527,7 +514,7 @@
     </main>
   </div>
 
-  <!-- ✅ FLOATING CHAT BUBBLE -->
+  <!-- FLOATING CHAT BUBBLE -->
   <button id="float-chat-toggle" class="floating-chat-toggle hidden">💬</button>
 
   <div id="float-chat-panel" class="floating-chat-panel hidden">
@@ -548,30 +535,9 @@
     </form>
   </div>
 
-  <!-- ✅ scripts order -->
+  <!-- scripts -->
   <script type="module" src="app.js"></script>
   <script type="module" src="tasks.js"></script>
   <script type="module" src="messages.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
