@@ -1104,6 +1104,139 @@ input:focus, textarea:focus{
 }
 
 
+/* =========================
+   Messages Sidebar — Glass + Search + Recent (OVERRIDE)
+   Put this at END of style.css
+========================= */
+
+/* sidebar glass */
+.messages-sidebar.glass{
+  background: rgba(255,255,255,.28) !important;
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 18px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 18px 40px rgba(0,0,0,.08);
+  overflow: hidden;
+  padding: 0 !important; /* we handle padding inside */
+}
+
+/* top section */
+.ms-top{
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.35);
+}
+
+.ms-title{
+  font-weight: 900;
+  color:#1f1f1f;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+/* search */
+.ms-search{ position: relative; }
+.ms-search input{
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: rgba(255,255,255,.65);
+  padding: 10px 36px 10px 12px;
+  outline: none;
+  font-size: 13px;
+}
+
+.ms-search-x{
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: rgba(0,0,0,.06);
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+/* headings inside glass */
+.messages-sidebar.glass .messages-sidebar-header{
+  padding: 10px 12px 6px;
+  margin: 0 !important;
+  color: rgba(60,60,60,.55);
+  font-weight: 900;
+}
+
+/* lists containers */
+.ms-list{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  padding-top: 6px;
+}
+
+.ms-empty{
+  font-size: 12px;
+  color: #666;
+  padding: 6px 8px;
+  opacity: .8;
+}
+
+/* clean cards for room/dm */
+.messages-sidebar.glass .chat-room,
+.messages-sidebar.glass .chat-dm{
+  background: rgba(255,255,255,.55) !important;
+  border: 1px solid rgba(0,0,0,.06) !important;
+  border-radius: 14px !important;
+  padding: 10px !important;
+  margin: 0 !important; /* remove old margin-bottom */
+  transition: transform .08s ease, background .15s ease, box-shadow .15s ease;
+}
+
+.messages-sidebar.glass .chat-room:hover,
+.messages-sidebar.glass .chat-dm:hover{
+  background: rgba(255,255,255,.78) !important;
+}
+
+.messages-sidebar.glass .chat-room:active,
+.messages-sidebar.glass .chat-dm:active{
+  transform: scale(.99);
+}
+
+/* active highlight (بدل .active القديم) */
+.chat-item-active{
+  background: rgba(255,255,255,.92) !important;
+  border-color: rgba(255,44,139,.35) !important;
+  box-shadow: 0 10px 22px rgba(255,44,139,.12);
+}
+
+/* keep old .active working too */
+.messages-sidebar.glass .chat-room.active,
+.messages-sidebar.glass .chat-dm.active{
+  background: rgba(255,255,255,.92) !important;
+  border-color: rgba(255,44,139,.35) !important;
+}
+
+/* sidebar layout fixes (so it looks modern) */
+.messages-layout{
+  gap: 12px; /* nicer spacing */
+}
+.messages-card{
+  background: transparent;
+}
+.messages-main{
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(0,0,0,.08);
+  border: 1px solid rgba(255,255,255,.55);
+}
+
+/* Small tweak for mobile */
+@media (max-width:768px){
+  .messages-sidebar.glass{ border-radius: 18px; }
+}
+
 
 
 
