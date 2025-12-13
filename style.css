@@ -579,7 +579,7 @@ input:focus, textarea:focus, select:focus{
 }
 
 /* Sidebar items */
-.chat-room, .chat-dm{
+.chat-room, .chat-dm, chat-recent{
   width:100%;
   text-align:left;
   border:none;
@@ -1143,5 +1143,6 @@ input:focus, textarea:focus, select:focus{
   .widgets-grid{ grid-template-columns:1fr; }
   .widget-calendar{ grid-column:auto; }
 }
+
 
 
