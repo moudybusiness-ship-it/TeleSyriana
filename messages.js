@@ -1,11 +1,8 @@
 // messages.js – TeleSyriana Firestore chat
-// ✅ Limit + scroll up (if supported by firebase.js exports)
-// ✅ Fallback mode if limit/getDocs not available (still renders last 50 + scroll up from cache)
-// ✅ Rooms + DMs
-// ✅ Status dots
-// ✅ DM reorder ONLY after sending message
-// ✅ Search filter
-// ✅ Glass sidebar compatible
+// ✅ Main Messages: Rooms + DMs + Search + Recents + Status dots
+// ✅ Lazy load (Limit + Scroll up) if firebase.js exports limit/getDocs/startAfter
+// ✅ Fallback if not available
+// ✅ Floating Chat: Rooms + DMs + Search + Lazy load (same logic) — UI injected if missing
 
 import { db, fs } from "./firebase.js";
 
@@ -19,7 +16,7 @@ const {
   serverTimestamp,
 } = fs;
 
-// Optional (may be missing depending on your firebase.js)
+// Optional pagination (depends on your firebase.js exports)
 const limitFn = fs.limit;
 const startAfterFn = fs.startAfter;
 const getDocsFn = fs.getDocs;
@@ -27,29 +24,49 @@ const getDocsFn = fs.getDocs;
 const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 const AGENT_DAYS_COL = "agentDays";
-
 const RECENTS_KEY_PREFIX = "telesyrianaChatRecents";
 
 const PAGE_SIZE = 50;
 const MAX_RENDER = 600;
 
-let currentUser = null;
-let activeChat = null;
+// -------------------- shared state --------------------
 
-let unsubscribeMain = null;
+let currentUser = null;
+
+// main (page) ui refs
+let main = {
+  listEl: null,
+  emptyEl: null,
+  nameEl: null,
+  descEl: null,
+  formEl: null,
+  inputEl: null,
+  dmListEl: null,
+};
+
+// floating ui refs (built/injected)
+let floating = {
+  toggleBtn: null,
+  panelEl: null,
+  closeBtn: null,
+  // injected containers:
+  built: false,
+  searchEl: null,
+  roomsEl: null,
+  dmsEl: null,
+  listEl: null,
+  formEl: null,
+  inputEl: null,
+  titleEl: null,
+  noteEl: null,
+};
+
 let unsubscribeStatus = null;
 
-let roomCacheAsc = [];        // full cache ASC (old -> new) for fallback mode
-let newestAsc = [];           // newest page ASC (old -> new) for limit mode
-let olderAsc = [];            // loaded older pages ASC for limit mode
-let oldestCursorDoc = null;   // cursor for loading older (limit mode)
-let isLoadingOlder = false;
-let noMoreOlder = false;
-
-let renderedCount = 0;        // for fallback lazy render
-let scrollBoundEl = null;
-
-let dmListEl = null;
+// main chat runtime
+let mainChat = makeChatRuntime("main");
+// floating chat runtime
+let floatChat = makeChatRuntime("float");
 
 /* ---------------- helpers ---------------- */
 
@@ -93,16 +110,27 @@ function statusToDotClass(status) {
   return "dot-offline";
 }
 
+function isNearBottom(el, px = 80) {
+  if (!el) return true;
+  return el.scrollHeight - (el.scrollTop + el.clientHeight) < px;
+}
+
 /* ---------------- UI helpers ---------------- */
 
-function clearActiveButtons() {
-  document.querySelectorAll(".chat-room, .chat-dm").forEach((b) => {
+function clearActiveButtons(rootEl) {
+  if (!rootEl) {
+    document.querySelectorAll(".chat-room, .chat-dm").forEach((b) => {
+      b.classList.remove("active", "chat-item-active");
+    });
+    return;
+  }
+  rootEl.querySelectorAll(".chat-room, .chat-dm").forEach((b) => {
     b.classList.remove("active", "chat-item-active");
   });
 }
 
-function setActiveButton(el) {
-  clearActiveButtons();
+function setActiveButton(rootEl, el) {
+  clearActiveButtons(rootEl);
   el?.classList.add("active", "chat-item-active");
 }
 
@@ -119,16 +147,17 @@ function setEmptyState(emptyEl, listEl, on) {
 
 function setInputEnabled(formEl, inputEl, enabled) {
   if (!formEl || !inputEl) return;
-  const btn = formEl.querySelector("button[type='submit']");
+  const btn = formEl.querySelector("button[type='submit'], button");
   inputEl.disabled = !enabled;
   if (btn) btn.disabled = !enabled;
 }
 
-function ensureTopLoader(listEl) {
-  let loader = listEl.querySelector("#chat-top-loader");
+function ensureTopLoader(listEl, id = "chat-top-loader") {
+  if (!listEl) return null;
+  let loader = listEl.querySelector(`#${id}`);
   if (!loader) {
     loader = document.createElement("div");
-    loader.id = "chat-top-loader";
+    loader.id = id;
     loader.style.display = "none";
     loader.style.padding = "8px";
     loader.style.textAlign = "center";
@@ -178,10 +207,13 @@ function createMessageNode(m) {
   return wrap;
 }
 
-function renderFresh(listEl, msgsAsc) {
+function renderFresh(listEl, msgsAsc, keepScroll = false) {
   if (!listEl) return;
 
   const loader = ensureTopLoader(listEl);
+  const wasNearBottom = isNearBottom(listEl);
+
+  // Remove all except loader
   Array.from(listEl.children).forEach((ch) => {
     if (ch !== loader) ch.remove();
   });
@@ -190,7 +222,12 @@ function renderFresh(listEl, msgsAsc) {
   (msgsAsc || []).forEach((m) => frag.appendChild(createMessageNode(m)));
   listEl.appendChild(frag);
 
-  listEl.scrollTop = listEl.scrollHeight;
+  // scroll behavior:
+  if (!keepScroll) {
+    listEl.scrollTop = listEl.scrollHeight;
+  } else {
+    if (wasNearBottom) listEl.scrollTop = listEl.scrollHeight;
+  }
 }
 
 function renderChunkToTop(listEl, chunkAsc) {
@@ -212,38 +249,64 @@ function renderChunkToTop(listEl, chunkAsc) {
   listEl.scrollTop = prevTop + (newHeight - prevHeight);
 }
 
-/* ---------------- Subscriptions ---------------- */
+/* ---------------- Runtime factory ---------------- */
 
-function unsubscribeAllMain() {
-  unsubscribeMain?.();
-  unsubscribeMain = null;
+function makeChatRuntime(tag) {
+  return {
+    tag,
+    activeChat: null,
+    unsubscribeMain: null,
 
-  roomCacheAsc = [];
-  newestAsc = [];
-  olderAsc = [];
-  oldestCursorDoc = null;
+    // fallback cache
+    roomCacheAsc: [],
+    renderedCount: 0,
 
-  renderedCount = 0;
-  isLoadingOlder = false;
-  noMoreOlder = false;
-  scrollBoundEl = null;
+    // limit mode cache
+    newestAsc: [],
+    olderAsc: [],
+    oldestCursorDoc: null,
+    isLoadingOlder: false,
+    noMoreOlder: false,
+
+    scrollBoundEl: null,
+  };
 }
 
-function attachScrollLoaderFallback(listEl) {
-  if (!listEl) return;
-  if (scrollBoundEl === listEl) return;
-  scrollBoundEl = listEl;
+function resetRuntime(rt) {
+  rt.unsubscribeMain?.();
+  rt.unsubscribeMain = null;
 
-  const loader = ensureTopLoader(listEl);
+  rt.activeChat = null;
+
+  rt.roomCacheAsc = [];
+  rt.renderedCount = 0;
+
+  rt.newestAsc = [];
+  rt.olderAsc = [];
+  rt.oldestCursorDoc = null;
+  rt.isLoadingOlder = false;
+  rt.noMoreOlder = false;
+
+  rt.scrollBoundEl = null;
+}
+
+/* ---------------- Pagination attachers ---------------- */
+
+function attachScrollLoaderFallback(rt, listEl) {
+  if (!listEl) return;
+  if (rt.scrollBoundEl === listEl) return;
+  rt.scrollBoundEl = listEl;
+
+  const loader = ensureTopLoader(listEl, `${rt.tag}-top-loader`);
 
   listEl.addEventListener("scroll", () => {
     if (listEl.scrollTop > 40) return;
-    if (renderedCount >= Math.min(MAX_RENDER, roomCacheAsc.length)) return;
+    if (rt.renderedCount >= Math.min(MAX_RENDER, rt.roomCacheAsc.length)) return;
 
     loader.style.display = "block";
 
-    const total = roomCacheAsc.length;
-    const alreadyRenderedStartIndex = Math.max(0, total - renderedCount);
+    const total = rt.roomCacheAsc.length;
+    const alreadyRenderedStartIndex = Math.max(0, total - rt.renderedCount);
     if (alreadyRenderedStartIndex <= 0) {
       loader.style.display = "none";
       return;
@@ -252,8 +315,8 @@ function attachScrollLoaderFallback(listEl) {
     const addCount = Math.min(PAGE_SIZE, alreadyRenderedStartIndex);
     const newStart = alreadyRenderedStartIndex - addCount;
 
-    const chunk = roomCacheAsc.slice(newStart, alreadyRenderedStartIndex);
-    renderedCount += chunk.length;
+    const chunk = rt.roomCacheAsc.slice(newStart, alreadyRenderedStartIndex);
+    rt.renderedCount += chunk.length;
 
     renderChunkToTop(listEl, chunk);
 
@@ -261,22 +324,22 @@ function attachScrollLoaderFallback(listEl) {
   });
 }
 
-function attachScrollLoaderLimitMode(listEl, roomId) {
+function attachScrollLoaderLimitMode(rt, listEl, roomId) {
   if (!listEl) return;
-  if (scrollBoundEl === listEl) return;
-  scrollBoundEl = listEl;
+  if (rt.scrollBoundEl === listEl) return;
+  rt.scrollBoundEl = listEl;
 
-  const loader = ensureTopLoader(listEl);
+  const loader = ensureTopLoader(listEl, `${rt.tag}-top-loader`);
 
   listEl.addEventListener("scroll", async () => {
     if (listEl.scrollTop > 40) return;
-    if (isLoadingOlder || noMoreOlder) return;
-    if (!oldestCursorDoc) return;
+    if (rt.isLoadingOlder || rt.noMoreOlder) return;
+    if (!rt.oldestCursorDoc) return;
 
-    // If firebase.js doesn't support getDocs/startAfter, stop here
+    // must have getDocs/startAfter/limit
     if (!getDocsFn || !startAfterFn || !limitFn) return;
 
-    isLoadingOlder = true;
+    rt.isLoadingOlder = true;
     loader.style.display = "block";
 
     try {
@@ -284,14 +347,14 @@ function attachScrollLoaderLimitMode(listEl, roomId) {
         collection(db, MESSAGES_COL),
         where("room", "==", roomId),
         orderBy("ts", "desc"),
-        startAfterFn(oldestCursorDoc),
+        startAfterFn(rt.oldestCursorDoc),
         limitFn(PAGE_SIZE)
       );
 
       const snap = await getDocsFn(qOlder);
 
       if (snap.empty) {
-        noMoreOlder = true;
+        rt.noMoreOlder = true;
         loader.textContent = "No more messages";
         setTimeout(() => {
           loader.style.display = "none";
@@ -303,16 +366,16 @@ function attachScrollLoaderLimitMode(listEl, roomId) {
       const olderDesc = [];
       snap.forEach((d) => olderDesc.push({ id: d.id, ...d.data() }));
 
-      oldestCursorDoc = snap.docs[snap.docs.length - 1] || oldestCursorDoc;
+      rt.oldestCursorDoc = snap.docs[snap.docs.length - 1] || rt.oldestCursorDoc;
 
       const chunkAsc = olderDesc.slice().reverse();
-      olderAsc = [...chunkAsc, ...olderAsc];
+      rt.olderAsc = [...chunkAsc, ...rt.olderAsc];
 
-      // cap
-      const combined = [...olderAsc, ...newestAsc];
+      // cap overall
+      const combined = [...rt.olderAsc, ...rt.newestAsc];
       if (combined.length > MAX_RENDER) {
         const extra = combined.length - MAX_RENDER;
-        olderAsc = olderAsc.slice(extra);
+        rt.olderAsc = rt.olderAsc.slice(extra);
       }
 
       renderChunkToTop(listEl, chunkAsc);
@@ -320,19 +383,21 @@ function attachScrollLoaderLimitMode(listEl, roomId) {
       console.error("Older load error:", e);
       alert("Error loading older messages: " + (e?.message || e));
     } finally {
-      isLoadingOlder = false;
+      rt.isLoadingOlder = false;
       loader.style.display = "none";
     }
   });
 }
 
-function subscribeMainToRoom(roomId, listEl) {
-  if (!listEl || !roomId) return;
-  unsubscribeAllMain();
+/* ---------------- Firestore subscribe ---------------- */
 
-  // ✅ LIMIT MODE (if supported)
+function subscribeToRoom(rt, roomId, listEl) {
+  if (!listEl || !roomId) return;
+  resetRuntime(rt);
+
   const canLimit = !!limitFn;
 
+  // ✅ LIMIT MODE
   if (canLimit) {
     const qNewest = query(
       collection(db, MESSAGES_COL),
@@ -341,7 +406,7 @@ function subscribeMainToRoom(roomId, listEl) {
       limitFn(PAGE_SIZE)
     );
 
-    unsubscribeMain = onSnapshot(
+    rt.unsubscribeMain = onSnapshot(
       qNewest,
       (snap) => {
         setCurrentUser();
@@ -349,15 +414,17 @@ function subscribeMainToRoom(roomId, listEl) {
         const newestDesc = [];
         snap.forEach((d) => newestDesc.push({ id: d.id, ...d.data() }));
 
-        newestAsc = newestDesc.slice().reverse();
-        oldestCursorDoc = snap.docs[snap.docs.length - 1] || null;
+        rt.newestAsc = newestDesc.slice().reverse();
+        rt.oldestCursorDoc = snap.docs[snap.docs.length - 1] || null;
 
-        // Do not destroy already loaded olderAsc; keep it
-        const combined = [...olderAsc, ...newestAsc];
-        const capped = combined.length > MAX_RENDER ? combined.slice(combined.length - MAX_RENDER) : combined;
+        // keep already loaded olderAsc
+        const combined = [...rt.olderAsc, ...rt.newestAsc];
+        const capped =
+          combined.length > MAX_RENDER ? combined.slice(combined.length - MAX_RENDER) : combined;
 
-        renderFresh(listEl, capped);
-        attachScrollLoaderLimitMode(listEl, roomId);
+        // keepScroll=true => only autoscroll if user is near bottom
+        renderFresh(listEl, capped, true);
+        attachScrollLoaderLimitMode(rt, listEl, roomId);
       },
       (err) => {
         console.error("Snapshot error:", err);
@@ -368,28 +435,28 @@ function subscribeMainToRoom(roomId, listEl) {
     return;
   }
 
-  // ✅ FALLBACK MODE (no limit available): listen all but render last PAGE_SIZE only
+  // ✅ FALLBACK MODE (listen all but render last PAGE_SIZE)
   const qAll = query(
     collection(db, MESSAGES_COL),
     where("room", "==", roomId),
     orderBy("ts", "desc")
   );
 
-  unsubscribeMain = onSnapshot(
+  rt.unsubscribeMain = onSnapshot(
     qAll,
     (snap) => {
       setCurrentUser();
 
       const allDesc = [];
       snap.forEach((d) => allDesc.push({ id: d.id, ...d.data() }));
-      roomCacheAsc = allDesc.slice().reverse(); // ASC
+      rt.roomCacheAsc = allDesc.slice().reverse();
 
-      renderedCount = Math.min(PAGE_SIZE, roomCacheAsc.length);
-      const start = Math.max(0, roomCacheAsc.length - renderedCount);
-      const initial = roomCacheAsc.slice(start);
+      rt.renderedCount = Math.min(PAGE_SIZE, rt.roomCacheAsc.length);
+      const start = Math.max(0, rt.roomCacheAsc.length - rt.renderedCount);
+      const initial = rt.roomCacheAsc.slice(start);
 
-      renderFresh(listEl, initial);
-      attachScrollLoaderFallback(listEl);
+      renderFresh(listEl, initial, false);
+      attachScrollLoaderFallback(rt, listEl);
     },
     (err) => {
       console.error("Snapshot error:", err);
@@ -426,15 +493,14 @@ function bumpRecent(otherId) {
   const map = loadRecents();
   map[String(otherId)] = Date.now();
   saveRecents(map);
-  applyDmOrder();
+  applyDmOrderMain();
+  applyDmOrderFloating();
 }
 
-function applyDmOrder() {
-  if (!dmListEl) dmListEl = document.getElementById("dm-list");
-  if (!dmListEl) return;
-
+function applyDmOrder(listEl) {
+  if (!listEl) return;
   const map = loadRecents();
-  const buttons = Array.from(dmListEl.querySelectorAll(".chat-dm"));
+  const buttons = Array.from(listEl.querySelectorAll(".chat-dm"));
 
   buttons.sort((a, b) => {
     const ida = String(a.dataset.dm || "");
@@ -445,7 +511,16 @@ function applyDmOrder() {
     return ida.localeCompare(idb);
   });
 
-  buttons.forEach((b) => dmListEl.appendChild(b));
+  buttons.forEach((b) => listEl.appendChild(b));
+}
+
+function applyDmOrderMain() {
+  if (!main.dmListEl) main.dmListEl = document.getElementById("dm-list");
+  applyDmOrder(main.dmListEl);
+}
+
+function applyDmOrderFloating() {
+  applyDmOrder(floating.dmsEl);
 }
 
 /* ---------------- Status dots ---------------- */
@@ -457,7 +532,7 @@ function subscribeStatusDots() {
   const q = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
 
   unsubscribeStatus = onSnapshot(q, (snap) => {
-    // reset
+    // reset all dots everywhere
     document.querySelectorAll("[data-status-dot]").forEach((dot) => {
       dot.classList.remove("dot-online", "dot-warn", "dot-offline");
       dot.classList.add("dot-offline");
@@ -468,12 +543,13 @@ function subscribeStatusDots() {
       const uid = String(d.userId || "");
       if (!uid) return;
 
-      const dot = document.querySelector(`[data-status-dot="${uid}"]`);
-      if (!dot) return;
-
       const cls = statusToDotClass(d.status || "unavailable");
-      dot.classList.remove("dot-online", "dot-warn", "dot-offline");
-      dot.classList.add(cls);
+
+      const dot = document.querySelector(`[data-status-dot="${uid}"]`);
+      if (dot) {
+        dot.classList.remove("dot-online", "dot-warn", "dot-offline");
+        dot.classList.add(cls);
+      }
 
       const sub = document.querySelector(`[data-sub="${uid}"]`);
       if (sub) sub.textContent = d.status ? String(d.status).replaceAll("_", " ") : "unavailable";
@@ -483,14 +559,12 @@ function subscribeStatusDots() {
 
 /* ---------------- Search ---------------- */
 
-function hookSearch() {
-  const input = document.getElementById("chat-search");
-  const clear = document.getElementById("chat-search-clear");
-  if (!input) return;
+function hookSearch(inputEl, clearBtn, scopeRoot) {
+  if (!inputEl) return;
 
   const run = () => {
-    const q = input.value.trim().toLowerCase();
-    document.querySelectorAll(".chat-room, .chat-dm").forEach((btn) => {
+    const q = inputEl.value.trim().toLowerCase();
+    scopeRoot.querySelectorAll(".chat-room, .chat-dm").forEach((btn) => {
       const titleEl = btn.querySelector(".chat-room-title");
       const subEl = btn.querySelector(".chat-room-sub");
       const title = (titleEl?.textContent || btn.textContent || "").toLowerCase();
@@ -500,42 +574,235 @@ function hookSearch() {
     });
   };
 
-  input.addEventListener("input", run);
-  clear?.addEventListener("click", () => {
-    input.value = "";
-    input.focus();
+  inputEl.addEventListener("input", run);
+  clearBtn?.addEventListener("click", () => {
+    inputEl.value = "";
+    inputEl.focus();
     run();
   });
 
   run();
 }
 
-/* ---------------- Init ---------------- */
+/* ---------------- Floating UI build (inject) ---------------- */
 
-document.addEventListener("DOMContentLoaded", () => {
-  setCurrentUser();
+function buildFloatingUIIfNeeded() {
+  floating.toggleBtn = document.getElementById("float-chat-toggle");
+  floating.panelEl = document.getElementById("float-chat-panel");
+  floating.closeBtn = document.getElementById("float-chat-close");
 
-  const listEl = document.getElementById("chat-message-list");
-  const emptyEl = document.getElementById("chat-empty");
-  const nameEl = document.getElementById("chat-room-name");
-  const descEl = document.getElementById("chat-room-desc");
-  const formEl = document.getElementById("chat-form");
-  const inputEl = document.getElementById("chat-input");
+  if (!floating.panelEl || floating.built) return;
 
-  dmListEl = document.getElementById("dm-list");
+  // We will replace the panel content (keep header if exists)
+  // Keep existing header nodes if present
+  const header = floating.panelEl.querySelector(".floating-chat-header");
+  const existingForm = floating.panelEl.querySelector("#float-chat-form");
 
-  hookSearch();
-  applyDmOrder();
+  // Clear everything except header; we rebuild body + form
+  Array.from(floating.panelEl.children).forEach((ch) => {
+    if (ch === header) return;
+    ch.remove();
+  });
+
+  // Body layout (sidebar + chat)
+  const body = document.createElement("div");
+  body.className = "floating-mini"; // you can style later in CSS
+
+  body.innerHTML = `
+    <aside class="floating-mini-side">
+      <div class="floating-mini-top">
+        <input id="float-search" class="floating-mini-search" placeholder="Search…" autocomplete="off" />
+        <button id="float-search-clear" class="floating-mini-search-x" type="button" title="Clear">×</button>
+      </div>
+
+      <div class="floating-mini-section">Rooms</div>
+      <div class="floating-mini-list" id="float-rooms"></div>
+
+      <div class="floating-mini-section">Direct messages</div>
+      <div class="floating-mini-list" id="float-dms"></div>
+    </aside>
+
+    <section class="floating-mini-chat">
+      <div class="floating-chat-body">
+        <div id="float-room-name" class="floating-chat-room-name">Select chat</div>
+        <div id="float-room-note" class="floating-chat-note">Choose a room or DM</div>
+        <div id="float-chat-messages" class="floating-chat-messages"></div>
+      </div>
+
+      <form id="float-chat-form" class="floating-chat-input-row">
+        <input id="float-chat-input" type="text" autocomplete="off" placeholder="Quick message…" disabled />
+        <button id="float-send-btn" type="submit" disabled>Send</button>
+      </form>
+    </section>
+  `;
+
+  floating.panelEl.appendChild(body);
+
+  floating.searchEl = floating.panelEl.querySelector("#float-search");
+  floating.roomsEl = floating.panelEl.querySelector("#float-rooms");
+  floating.dmsEl = floating.panelEl.querySelector("#float-dms");
+  floating.listEl = floating.panelEl.querySelector("#float-chat-messages");
+  floating.formEl = floating.panelEl.querySelector("#float-chat-form");
+  floating.inputEl = floating.panelEl.querySelector("#float-chat-input");
+  floating.titleEl = floating.panelEl.querySelector("#float-room-name");
+  floating.noteEl = floating.panelEl.querySelector("#float-room-note");
+
+  // remove any old form if it was outside our injected layout
+  if (existingForm && existingForm !== floating.formEl) existingForm.remove();
+
+  floating.built = true;
+}
+
+/* ---------------- Rooms & DMs populate for floating ---------------- */
+
+function getStaticRooms() {
+  return [
+    {
+      id: "general",
+      title: "General chat",
+      sub: "All agents & supervisors",
+      className: "role-room",
+      avatar: "#",
+      restricted: null,
+    },
+    {
+      id: "supervisors",
+      title: "Supervisors",
+      sub: "Supervisor only",
+      className: "role-supervisor",
+      avatar: "S",
+      restricted: "supervisor",
+    },
+    {
+      id: "ai",
+      title: "ChatGPT 5",
+      sub: "Coming soon",
+      className: "role-ai",
+      avatar: "AI",
+      restricted: "disabled",
+    },
+  ];
+}
+
+function getStaticDmUsers() {
+  // based on your HTML list (same IDs)
+  return [
+    { id: "1001", name: "Agent 01", sub: "Direct chat", role: "agent" },
+    { id: "1002", name: "Agent 02", sub: "Direct chat", role: "agent" },
+    { id: "1003", name: "Agent 03", sub: "Direct chat", role: "agent" },
+    { id: "2001", name: "Supervisor Dema", sub: "Direct chat", role: "supervisor" },
+    { id: "2002", name: "Supervisor Moustafa", sub: "Direct chat", role: "supervisor" },
+  ];
+}
+
+function renderFloatingSidebar() {
+  if (!floating.roomsEl || !floating.dmsEl) return;
+
+  // rooms
+  floating.roomsEl.innerHTML = "";
+  getStaticRooms().forEach((r) => {
+    const btn = document.createElement("button");
+    btn.className = "chat-room float-item";
+    btn.type = "button";
+    btn.dataset.room = r.id;
+    btn.innerHTML = `
+      <div class="chat-row">
+        <div class="chat-avatar ${r.className}">${r.avatar}</div>
+        <div class="chat-row-text">
+          <div class="chat-room-title">${escapeHtml(r.title)}</div>
+          <div class="chat-room-sub">${escapeHtml(r.sub)}</div>
+        </div>
+      </div>
+    `;
+    floating.roomsEl.appendChild(btn);
+  });
+
+  // dms
+  floating.dmsEl.innerHTML = "";
+  getStaticDmUsers().forEach((u) => {
+    const btn = document.createElement("button");
+    btn.className = "chat-dm float-item";
+    btn.type = "button";
+    btn.dataset.dm = u.id;
+
+    const initials = getInitials(u.name);
+
+    btn.innerHTML = `
+      <div class="chat-row">
+        <div class="dm-avatar-wrap">
+          <div class="chat-avatar ${u.role === "supervisor" ? "role-supervisor" : "role-agent"}" data-avatar="${u.id}">${escapeHtml(initials)}</div>
+          <span class="status-dot dot-offline" data-status-dot="${u.id}"></span>
+        </div>
+        <div class="chat-row-text">
+          <div class="chat-room-title" data-name="${u.id}">${escapeHtml(u.name)}</div>
+          <div class="chat-room-sub" data-sub="${u.id}">${escapeHtml(u.sub)}</div>
+        </div>
+      </div>
+    `;
+    floating.dmsEl.appendChild(btn);
+  });
+
+  // apply ordering by recents
+  applyDmOrderFloating();
+}
+
+/* ---------------- Open chat (main/floating) ---------------- */
+
+function openChat(rt, ui, rootForActive, chatType, roomId, otherId, title, desc) {
+  rt.activeChat = chatType === "dm" ? { type: "dm", roomId, otherId } : { type: "room", roomId };
+
+  setHeader(ui.nameEl || ui.titleEl, ui.descEl || ui.noteEl, title, desc);
+  if (ui.listEl && ui.emptyEl) setEmptyState(ui.emptyEl, ui.listEl, false);
+  setInputEnabled(ui.formEl, ui.inputEl, true);
+
+  if (ui.listEl) {
+    ui.listEl.innerHTML = "";
+    ensureTopLoader(ui.listEl, `${rt.tag}-top-loader`);
+  }
+
+  subscribeToRoom(rt, roomId, ui.listEl);
+
+  // mark active on sidebar buttons
+  if (rootForActive) {
+    // find matching button
+    if (chatType === "room") {
+      const btn = rootForActive.querySelector(`.chat-room[data-room="${roomId}"]`);
+      setActiveButton(rootForActive, btn);
+    } else {
+      const btn = rootForActive.querySelector(`.chat-dm[data-dm="${otherId}"]`);
+      setActiveButton(rootForActive, btn);
+    }
+  }
+}
+
+/* ---------------- Main page init ---------------- */
+
+function initMainMessagesPage() {
+  main.listEl = document.getElementById("chat-message-list");
+  main.emptyEl = document.getElementById("chat-empty");
+  main.nameEl = document.getElementById("chat-room-name");
+  main.descEl = document.getElementById("chat-room-desc");
+  main.formEl = document.getElementById("chat-form");
+  main.inputEl = document.getElementById("chat-input");
+  main.dmListEl = document.getElementById("dm-list");
+
+  // Search (page)
+  const searchInput = document.getElementById("chat-search");
+  const searchClear = document.getElementById("chat-search-clear");
+  const sidebar = document.querySelector("#page-messages .messages-sidebar");
+  if (searchInput && sidebar) hookSearch(searchInput, searchClear, sidebar);
+
+  applyDmOrderMain();
   subscribeStatusDots();
 
-  // default
-  activeChat = null;
-  setHeader(nameEl, descEl, "Messages", "Start chatting…");
-  if (listEl && emptyEl) setEmptyState(emptyEl, listEl, true);
-  setInputEnabled(formEl, inputEl, false);
+  // default state
+  mainChat.activeChat = null;
+  setHeader(main.nameEl, main.descEl, "Messages", "Start chatting…");
+  if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
+  setInputEnabled(main.formEl, main.inputEl, false);
 
-  // Rooms
-  document.querySelectorAll(".chat-room").forEach((btn) => {
+  // Rooms click (page)
+  document.querySelectorAll("#page-messages .chat-room").forEach((btn) => {
     btn.addEventListener("click", () => {
       setCurrentUser();
       if (!currentUser) return alert("Please login first.");
@@ -544,13 +811,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!room) return;
 
       if (room === "ai") {
-        activeChat = { type: "ai", roomId: "ai" };
-        setActiveButton(btn);
-        unsubscribeAllMain();
-        if (listEl) listEl.innerHTML = "";
-        setHeader(nameEl, descEl, "ChatGPT 5", "Coming soon…");
-        if (listEl && emptyEl) setEmptyState(emptyEl, listEl, true);
-        setInputEnabled(formEl, inputEl, false);
+        mainChat.activeChat = { type: "ai", roomId: "ai" };
+        setActiveButton(document, btn);
+        resetRuntime(mainChat);
+        if (main.listEl) main.listEl.innerHTML = "";
+        setHeader(main.nameEl, main.descEl, "ChatGPT 5", "Coming soon…");
+        if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
+        setInputEnabled(main.formEl, main.inputEl, false);
         return;
       }
 
@@ -566,19 +833,12 @@ document.addEventListener("DOMContentLoaded", () => {
           ? "All agents & supervisors • Be respectful • No customer data."
           : "Supervisor-only space for internal notes and coordination.";
 
-      activeChat = { type: "room", roomId: room };
-
-      setActiveButton(btn);
-      setHeader(nameEl, descEl, title, desc);
-      if (listEl && emptyEl) setEmptyState(emptyEl, listEl, false);
-      setInputEnabled(formEl, inputEl, true);
-
-      subscribeMainToRoom(room, listEl);
+      openChat(mainChat, main, document, "room", room, null, title, desc);
     });
   });
 
-  // DMs
-  document.querySelectorAll(".chat-dm").forEach((btn) => {
+  // DM click (page)
+  document.querySelectorAll("#page-messages .chat-dm").forEach((btn) => {
     btn.addEventListener("click", () => {
       setCurrentUser();
       if (!currentUser) return alert("Please login first.");
@@ -591,31 +851,23 @@ document.addEventListener("DOMContentLoaded", () => {
       const titleEl = btn.querySelector(".chat-room-title");
       const otherName = titleEl ? titleEl.textContent.trim() : `User ${otherId}`;
 
-      activeChat = { type: "dm", roomId, otherId };
-
-      setActiveButton(btn);
-      setHeader(nameEl, descEl, otherName, `Direct message • CCMS ${otherId}`);
-      if (listEl && emptyEl) setEmptyState(emptyEl, listEl, false);
-      setInputEnabled(formEl, inputEl, true);
-
-      // ✅ reorder only after sending (not on open)
-      subscribeMainToRoom(roomId, listEl);
+      openChat(mainChat, main, document, "dm", roomId, otherId, otherName, `Direct message • CCMS ${otherId}`);
     });
   });
 
-  // Send
-  formEl?.addEventListener("submit", async (e) => {
+  // Send (page)
+  main.formEl?.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    const text = inputEl?.value?.trim();
+    const text = main.inputEl?.value?.trim();
     if (!text) return;
 
     setCurrentUser();
     if (!currentUser) return alert("Please login first.");
-    if (!activeChat || activeChat.type === "ai") return;
+    if (!mainChat.activeChat || mainChat.activeChat.type === "ai") return;
 
     await addDoc(collection(db, MESSAGES_COL), {
-      room: activeChat.roomId,
+      room: mainChat.activeChat.roomId,
       text,
       userId: currentUser.id,
       name: currentUser.name,
@@ -623,32 +875,154 @@ document.addEventListener("DOMContentLoaded", () => {
       ts: serverTimestamp(),
     });
 
-    if (activeChat.type === "dm") bumpRecent(activeChat.otherId);
+    if (mainChat.activeChat.type === "dm") bumpRecent(mainChat.activeChat.otherId);
 
-    inputEl.value = "";
+    main.inputEl.value = "";
   });
+}
+
+/* ---------------- Floating init + hooks ---------------- */
+
+function initFloatingChat() {
+  buildFloatingUIIfNeeded();
+  renderFloatingSidebar();
+
+  // Floating search
+  const clearBtn = floating.panelEl?.querySelector("#float-search-clear");
+  if (floating.searchEl && floating.panelEl) {
+    hookSearch(floating.searchEl, clearBtn, floating.panelEl);
+  }
+
+  // click handlers (rooms/dms) inside floating panel
+  floating.roomsEl?.querySelectorAll(".chat-room").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setCurrentUser();
+      if (!currentUser) return alert("Please login first.");
+
+      const room = btn.dataset.room;
+      if (!room) return;
+
+      if (room === "ai") {
+        floatChat.activeChat = { type: "ai", roomId: "ai" };
+        setActiveButton(floating.panelEl, btn);
+        resetRuntime(floatChat);
+        if (floating.listEl) floating.listEl.innerHTML = "";
+        setHeader(floating.titleEl, floating.noteEl, "ChatGPT 5", "Coming soon…");
+        setInputEnabled(floating.formEl, floating.inputEl, false);
+        return;
+      }
+
+      if (room === "supervisors" && currentUser.role !== "supervisor") {
+        alert("Supervisor only room.");
+        return;
+      }
+
+      const title =
+        room === "general" ? "General chat" : room === "supervisors" ? "Supervisors" : "Room";
+      const desc =
+        room === "general"
+          ? "All agents & supervisors"
+          : "Supervisor-only notes";
+
+      openChat(floatChat, floating, floating.panelEl, "room", room, null, title, desc);
+    });
+  });
+
+  floating.dmsEl?.querySelectorAll(".chat-dm").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setCurrentUser();
+      if (!currentUser) return alert("Please login first.");
+
+      const otherId = btn.dataset.dm;
+      if (!otherId) return;
+
+      const roomId = dmRoomId(currentUser.id, otherId);
+
+      const titleEl = btn.querySelector(".chat-room-title");
+      const otherName = titleEl ? titleEl.textContent.trim() : `User ${otherId}`;
+
+      openChat(floatChat, floating, floating.panelEl, "dm", roomId, otherId, otherName, `Direct message • CCMS ${otherId}`);
+    });
+  });
+
+  // Send (floating)
+  floating.formEl?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = floating.inputEl?.value?.trim();
+    if (!text) return;
+
+    setCurrentUser();
+    if (!currentUser) return alert("Please login first.");
+    if (!floatChat.activeChat || floatChat.activeChat.type === "ai") return;
+
+    await addDoc(collection(db, MESSAGES_COL), {
+      room: floatChat.activeChat.roomId,
+      text,
+      userId: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+      ts: serverTimestamp(),
+    });
+
+    if (floatChat.activeChat.type === "dm") bumpRecent(floatChat.activeChat.otherId);
+
+    floating.inputEl.value = "";
+  });
+
+  // Disable inputs by default until chat selected
+  setHeader(floating.titleEl, floating.noteEl, "TeleSyriana", "Select a room or DM");
+  setInputEnabled(floating.formEl, floating.inputEl, false);
+}
+
+/* ---------------- user changed / reset ---------------- */
+
+function handleUserChanged() {
+  setCurrentUser();
+  subscribeStatusDots();
+  applyDmOrderMain();
+  applyDmOrderFloating();
+
+  // if logged out: stop listeners, clear UIs
+  if (!currentUser) {
+    resetRuntime(mainChat);
+    resetRuntime(floatChat);
+    clearActiveButtons(document);
+    if (floating.panelEl) clearActiveButtons(floating.panelEl);
+
+    // main
+    if (main.listEl) main.listEl.innerHTML = "";
+    setHeader(main.nameEl, main.descEl, "Messages", "Start chatting…");
+    if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
+    setInputEnabled(main.formEl, main.inputEl, false);
+
+    // floating
+    if (floating.listEl) floating.listEl.innerHTML = "";
+    setHeader(floating.titleEl, floating.noteEl, "TeleSyriana", "Select a room or DM");
+    setInputEnabled(floating.formEl, floating.inputEl, false);
+  }
+}
+
+/* ---------------- Init ---------------- */
+
+document.addEventListener("DOMContentLoaded", () => {
+  setCurrentUser();
+
+  // main page init
+  initMainMessagesPage();
+
+  // floating init (only if elements exist)
+  buildFloatingUIIfNeeded();
+  if (floating.panelEl) {
+    initFloatingChat();
+  }
+
+  // keep status dots alive
+  subscribeStatusDots();
+  applyDmOrderMain();
+  applyDmOrderFloating();
 });
 
 // login/logout without refresh
-window.addEventListener("telesyriana:user-changed", () => {
-  setCurrentUser();
-  subscribeStatusDots();
-  applyDmOrder();
+window.addEventListener("telesyriana:user-changed", handleUserChanged);
 
-  const listEl = document.getElementById("chat-message-list");
-  const emptyEl = document.getElementById("chat-empty");
-  const roomNameEl = document.getElementById("chat-room-name");
-  const roomDescEl = document.getElementById("chat-room-desc");
-  const formEl = document.getElementById("chat-form");
-  const inputEl = document.getElementById("chat-input");
 
-  if (!currentUser) {
-    unsubscribeAllMain();
-    clearActiveButtons();
-    activeChat = null;
-    if (listEl) listEl.innerHTML = "";
-    setHeader(roomNameEl, roomDescEl, "Messages", "Start chatting…");
-    if (listEl && emptyEl) setEmptyState(emptyEl, listEl, true);
-    setInputEnabled(formEl, inputEl, false);
-  }
-});
