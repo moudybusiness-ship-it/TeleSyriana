@@ -6,6 +6,19 @@
 *::after { box-sizing: border-box; }
 
 :root{
+   --accent:#ff2c8b;
+  --accent2:#ff5db6;
+  --bg1:#ff2c8b;
+  --bg2:#ff8bd3;
+
+  --card:#fff;
+  --muted:#777;
+  --text:#222;
+  --line:#f0f0f0;
+  --soft:#fafafa;
+
+  --msg-in:#f1f1f1;
+  --shadow:0 16px 30px rgba(0,0,0,.18);
   /* Female (default) */
   --pink:#ff2c8b;
   --pink2:#ff5db6;
@@ -39,12 +52,22 @@
 }
 
 /* ✅ Male theme ready (later: <body data-theme="male">) */
-body[data-theme="male"]{
-  --brand: var(--blue);
-  --brand2: var(--blue2);
-  --bg1: #1f6dff;
-  --bg2: #7ad7ff;
+/* ✅ Female */
+body[data-theme="female"]{
+  --accent:#ff2c8b;
+  --accent2:#ff5db6;
+  --bg1:#ff2c8b;
+  --bg2:#ff8bd3;
 }
+
+/* ✅ Male (Blue) */
+body[data-theme="male"]{
+  --accent:#1e88ff;
+  --accent2:#4cc3ff;
+  --bg1:#1565c0;
+  --bg2:#6ec6ff;
+}
+
 
 body{
   margin:0;
@@ -1267,6 +1290,7 @@ body.theme-male{
   --bg1:#1b5cff;      /* background 1 */
   --bg2:#9bd0ff;      /* background 2 */
 }
+
 
 
 
