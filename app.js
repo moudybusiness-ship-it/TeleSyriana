@@ -1,863 +1,460 @@
-// app.js — TeleSyriana Agent Access Panel (UPDATED FIX)
-// ✅ Fires telesyriana:user-changed on session restore
-// ✅ Fallback enables Messages input if user is logged-in
-// ✅ Better error handling (alerts on write failures)
-// ✅ Floating chat shell only (messages.js handles content)
-
-import { db, fs } from "./firebase.js";
-
-const {
-  doc,
-  setDoc,
-  getDoc,
-  collection,
-  query,
-  where,
-  onSnapshot,
-  serverTimestamp,
-} = fs;
-
-// Demo users
-const USERS = {
-  "1001": { password: "1234", role: "agent", name: "Agent 01" },
-  "1002": { password: "1234", role: "agent", name: "Agent 02" },
-  "1003": { password: "1234", role: "agent", name: "Agent 03" },
-  "2001": { password: "sup123", role: "supervisor", name: "Supervisor Dema" },
-  "2002": { password: "sup123", role: "supervisor", name: "Supervisor Moustafa" },
-};
-
-const USER_KEY = "telesyrianaUser";
-const STATE_KEY = "telesyrianaState";
-
-const BREAK_LIMIT_MIN = 45;
-const WORK_TARGET_MIN = 8 * 60;
-
-const AGENT_DAYS_COL = "agentDays";
-const USER_PROFILE_COL = "userProfiles";
-
-let currentUser = null;
-let state = null;
-
-let timerId = null;
-let supUnsub = null;
-let clockIntervalId = null;
-
-let appInited = false;
-
 /* =========================
-   ✅ DEVICE BLOCK (PHONES)
+   TeleSyriana – App.js
+   - Login / Logout
+   - Navigation (Home/Tasks/Messages/Settings)
+   - Status selector (basic)
+   - Dashboard widgets (clock/calendar safe rendering)
+   - Tasks mini-kanban (optional if elements exist)
+   - Theme toggle (optional)
 ========================= */
-function isIPadLike() {
-  return /iPad/i.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-function isPhoneLike() {
-  const ua = navigator.userAgent || "";
-  if (/iPhone|iPod/i.test(ua)) return true;
-  if (/Android/i.test(ua) && /Mobile/i.test(ua)) return true;
-  if (/Mobile/i.test(ua) && !isIPadLike()) return true;
-  return false;
-}
-function ensureAllowedDeviceOrBlock() {
-  if (isIPadLike()) return true;
-  if (isPhoneLike()) {
-    renderMobileBlockedScreen();
-    return false;
+
+(function () {
+  "use strict";
+
+  /* -------------------------
+     Small helpers
+  ------------------------- */
+  const $ = (q, root = document) => root.querySelector(q);
+  const $$ = (q, root = document) => Array.from(root.querySelectorAll(q));
+  const byId = (id) => document.getElementById(id);
+
+  function safeText(el, text) {
+    if (!el) return;
+    el.textContent = text;
   }
-  return true;
-}
-function renderMobileBlockedScreen() {
-  document.body.innerHTML = `
-    <div style="
-      min-height:100vh;display:flex;align-items:center;justify-content:center;
-      padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      background:linear-gradient(135deg,#ff2c8b,#ff8bd3);color:#fff;text-align:center;">
-      <div style="
-        width:min(520px,92vw);background:rgba(255,255,255,.15);
-        border:1px solid rgba(255,255,255,.35);border-radius:18px;
-        padding:22px 18px;backdrop-filter:blur(14px);
-        box-shadow:0 18px 40px rgba(0,0,0,.25);">
-        <div style="font-size:20px;font-weight:900;margin-bottom:8px;">
-          TeleSyriana Portal
-        </div>
-        <div style="font-size:13px;opacity:.95;line-height:1.6;margin-bottom:14px;">
-          This portal is available on <b>iPad</b> and <b>Desktop</b> only.<br/>
-          Please open it on an iPad or computer.
-        </div>
-        <div style="font-size:12px;opacity:.85;">
-          (Mobile phones are not supported for security & layout reasons.)
-        </div>
-      </div>
-    </div>
-  `;
-}
 
-/* =========================
-   HELPERS
-========================= */
-function notifyUserChanged() {
-  // messages.js listens to this to refresh currentUser + enable inputs
-  window.dispatchEvent(new Event("telesyriana:user-changed"));
-}
-
-function getTodayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
-function statusLabel(code) {
-  switch (code) {
-    case "in_operation": return "Operating";
-    case "break": return "Break";
-    case "meeting": return "Meeting";
-    case "handling": return "Handling";
-    case "unavailable": return "Unavailable";
-    default: return code;
+  function show(el) {
+    if (!el) return;
+    el.classList.remove("hidden");
   }
-}
 
-function formatDuration(mins) {
-  const m = Math.max(0, Math.floor(Number(mins) || 0));
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  const r = m % 60;
-  const hrLabel = h === 1 ? "1 hr" : `${h} hrs`;
-  return r === 0 ? hrLabel : `${hrLabel} ${r} min`;
-}
+  function hide(el) {
+    if (!el) return;
+    el.classList.add("hidden");
+  }
 
-function computeWorkedMinutes(live) {
-  const op = Number(live.operation) || 0;
-  const meet = Number(live.meeting) || 0;
-  const hand = Number(live.handling) || 0;
-  const br = Number(live.breakUsed) || 0;
-  return op + meet + hand + br;
-}
+  function setActiveNav(page) {
+    $$(".nav-link[data-page]").forEach((b) => b.classList.remove("active"));
+    const btn = $(`.nav-link[data-page="${page}"]`);
+    if (btn) btn.classList.add("active");
+  }
 
-/* =========================
-   WIDGETS
-========================= */
-function pad2(n) { return String(n).padStart(2, "0"); }
+  function setPage(page) {
+    // pages may be: page-home / page-tasks / page-messages / page-settings
+    const pages = ["home", "tasks", "messages", "settings"];
+    pages.forEach((p) => hide(byId(`page-${p}`)));
+    show(byId(`page-${page}`));
+    setActiveNav(page);
+  }
 
-function renderClockWidget() {
-  const clockEl = document.getElementById("widget-clock");
-  const dayEl = document.getElementById("widget-day");
-  const dateEl = document.getElementById("widget-date");
-  if (!clockEl || !dayEl || !dateEl) return;
+  /* -------------------------
+     Fake users (you can replace later with real backend)
+  ------------------------- */
+  const USERS = [
+    { username: "agent01", password: "1234", name: "Agent 01", role: "AGENT", ccms: "1001" },
+    { username: "agent02", password: "1234", name: "Agent 02", role: "AGENT", ccms: "1002" },
+    { username: "dema", password: "1234", name: "Supervisor Dema", role: "SUPERVISOR", ccms: "2001" },
+  ];
 
-  const now = new Date();
-  clockEl.textContent = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
-  dayEl.textContent = now.toLocaleDateString(undefined, { weekday: "long" });
-  dateEl.textContent = now.toLocaleDateString(undefined, {
-    day: "2-digit", month: "short", year: "numeric",
-  });
-}
+  const state = {
+    isAuthed: false,
+    user: null,
+    status: "in_operation", // in_operation | break | meeting | handling | unavailable
+    breakLimitMin: 45,
+    breakUsedMin: 7,
+    operationMin: 0,
+    meetingMin: 0,
+    handlingMin: 0,
+    timer: null,
+  };
 
-function setRing(percent) {
-  const p = Math.max(0, Math.min(100, Math.round(percent)));
-  const ring = document.getElementById("ring-progress");
-  const label = document.getElementById("ring-label");
-  if (!ring || !label) return;
-  ring.setAttribute("stroke-dasharray", `${p}, 100`);
-  label.textContent = `${p}%`;
-}
+  /* -------------------------
+     DOM refs (optional)
+  ------------------------- */
+  const loginScreen = byId("login-screen");
+  const dashboardScreen = byId("dashboard-screen");
 
-function updateWorkUI(workedMin) {
-  const used = Math.max(0, Math.floor(workedMin));
-  const remaining = Math.max(0, WORK_TARGET_MIN - used);
+  const mainNav = byId("main-nav");
+  const logoutBtn = byId("logout-btn");
 
-  const workText = document.getElementById("work-text");
-  const targetText = document.getElementById("work-target-text");
-  const remainingText = document.getElementById("work-remaining-text");
-  if (workText) workText.textContent = formatDuration(used);
-  if (targetText) targetText.textContent = formatDuration(WORK_TARGET_MIN);
-  if (remainingText) remainingText.textContent = formatDuration(remaining);
+  // Login elements (support many ids)
+  const loginForm =
+    byId("login-form") ||
+    $("#login-screen form") ||
+    null;
 
-  const pct = WORK_TARGET_MIN > 0
-    ? Math.min(100, Math.round((used / WORK_TARGET_MIN) * 100))
-    : 0;
+  const loginUser =
+    byId("login-username") ||
+    byId("username") ||
+    $("#login-screen input[type='text']") ||
+    $("#login-screen input[name='username']");
 
-  const ring = document.getElementById("work-ring-progress");
-  const label = document.getElementById("work-ring-label");
-  if (ring) ring.setAttribute("stroke-dasharray", `${pct}, 100`);
-  if (label) label.textContent = `${pct}%`;
-}
+  const loginPass =
+    byId("login-password") ||
+    byId("password") ||
+    $("#login-screen input[type='password']") ||
+    $("#login-screen input[name='password']");
 
-/* =========================
-   MINI CALENDAR
-========================= */
-let calRef = new Date();
+  const loginAlert = byId("login-alert") || $("#login-screen .alert");
 
-function monthTitle(d) {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
+  // Header label (optional)
+  const headerUser = byId("header-user") || byId("agent-name") || null;
 
-function buildMiniCalendar() {
-  const titleEl = document.getElementById("cal-title");
-  const gridEl = document.getElementById("cal-grid");
-  if (!titleEl || !gridEl) return;
+  // Status elements (optional)
+  const statusSelect = byId("status-select");
+  const statusValue = $(".status-value") || byId("status-value");
 
-  titleEl.textContent = monthTitle(calRef);
-  gridEl.innerHTML = "";
+  // Dashboard fields (optional)
+  const breakUsedEl = byId("break-used");
+  const breakRemainEl = byId("break-remaining");
+  const opEl = byId("op-time");
+  const meetingEl = byId("meeting-time");
+  const handlingEl = byId("handling-time");
 
-  const year = calRef.getFullYear();
-  const month = calRef.getMonth();
-  const first = new Date(year, month, 1);
-  const startDay = (first.getDay() + 6) % 7; // Mon=0
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const prevDays = new Date(year, month, 0).getDate();
+  // Widgets (optional)
+  const widgetClock = byId("widget-clock");
+  const widgetToday = byId("widget-today");
+  const widgetDate = byId("widget-date");
+  const widgetCalendar = byId("mini-cal"); // if exists
 
-  const today = new Date();
-  const isThisMonth = today.getFullYear() === year && today.getMonth() === month;
+  // Settings (optional)
+  const themeToggle = byId("theme-toggle") || byId("toggle-theme-male");
 
-  for (let i = 0; i < 42; i++) {
-    const cell = document.createElement("div");
-    cell.className = "mini-day";
-    const dayNum = i - startDay + 1;
+  /* -------------------------
+     Auth UI
+  ------------------------- */
+  function setAuth(isAuthed, user = null) {
+    state.isAuthed = isAuthed;
+    state.user = user;
 
-    if (dayNum <= 0) {
-      cell.textContent = String(prevDays + dayNum);
-      cell.classList.add("muted");
-    } else if (dayNum > daysInMonth) {
-      cell.textContent = String(dayNum - daysInMonth);
-      cell.classList.add("muted");
+    if (isAuthed) {
+      hide(loginScreen);
+      show(dashboardScreen);
+      if (mainNav) mainNav.classList.remove("hidden");
+
+      // Update header name if exists
+      if (headerUser) safeText(headerUser, user?.name || "Agent");
+      // Default page
+      setPage("home");
+      startTicker();
+      renderAll();
     } else {
-      cell.textContent = String(dayNum);
-      if (isThisMonth && dayNum === today.getDate()) cell.classList.add("today");
-    }
-    gridEl.appendChild(cell);
-  }
-}
-
-function hookCalendarButtons() {
-  const prev = document.getElementById("cal-prev");
-  const next = document.getElementById("cal-next");
-  if (!prev || !next) return;
-
-  prev.onclick = () => {
-    calRef = new Date(calRef.getFullYear(), calRef.getMonth() - 1, 1);
-    buildMiniCalendar();
-  };
-  next.onclick = () => {
-    calRef = new Date(calRef.getFullYear(), calRef.getMonth() + 1, 1);
-    buildMiniCalendar();
-  };
-}
-
-/* =========================
-   LIVE USAGE
-========================= */
-function recomputeLiveUsage(nowMs) {
-  if (!state) return { breakUsed: 0, operation: 0, meeting: 0, handling: 0, unavailable: 0 };
-
-  const elapsedMin = (nowMs - state.lastStatusChange) / 60000;
-
-  let op = state.operationMinutes || 0;
-  let br = state.breakUsedMinutes || 0;
-  let meet = state.meetingMinutes || 0;
-  let hand = state.handlingMinutes || 0;
-  let unav = state.unavailableMinutes || 0;
-
-  switch (state.status) {
-    case "in_operation": op += elapsedMin; break;
-    case "break": br += elapsedMin; break;
-    case "meeting": meet += elapsedMin; break;
-    case "handling": hand += elapsedMin; break;
-    case "unavailable": unav += elapsedMin; break;
-  }
-
-  if (br > BREAK_LIMIT_MIN) br = BREAK_LIMIT_MIN;
-
-  return { breakUsed: br, operation: op, meeting: meet, handling: hand, unavailable: unav };
-}
-
-function applyElapsedToState(nowMs) {
-  if (!state) return;
-  const elapsedMin = (nowMs - state.lastStatusChange) / 60000;
-  if (elapsedMin <= 0) return;
-
-  switch (state.status) {
-    case "in_operation": state.operationMinutes += elapsedMin; break;
-    case "break": state.breakUsedMinutes = Math.min(BREAK_LIMIT_MIN, state.breakUsedMinutes + elapsedMin); break;
-    case "meeting": state.meetingMinutes += elapsedMin; break;
-    case "handling": state.handlingMinutes += elapsedMin; break;
-    case "unavailable": state.unavailableMinutes += elapsedMin; break;
-  }
-
-  state.lastStatusChange = nowMs;
-}
-
-/* =========================
-   FIRESTORE SYNC
-========================= */
-async function syncStateToFirestore(live) {
-  if (!currentUser || !state) return;
-  const today = state.day || getTodayKey();
-  const id = `${today}_${currentUser.id}`;
-  const usage = live || recomputeLiveUsage(Date.now());
-
-  const payload = {
-    userId: currentUser.id,
-    name: currentUser.name,
-    role: currentUser.role,
-    day: today,
-    status: state.status,
-    loginTime: state.loginTime,
-    lastStatusChange: state.lastStatusChange,
-    breakUsedMinutes: usage.breakUsed,
-    operationMinutes: usage.operation,
-    meetingMinutes: usage.meeting,
-    handlingMinutes: usage.handling,
-    unavailableMinutes: usage.unavailable,
-    updatedAt: serverTimestamp(),
-  };
-
-  await setDoc(doc(collection(db, AGENT_DAYS_COL), id), payload, { merge: true });
-}
-
-function subscribeSupervisorDashboard() {
-  if (!currentUser || currentUser.role !== "supervisor") return;
-  if (supUnsub) return;
-
-  const q = query(collection(db, AGENT_DAYS_COL), where("day", "==", getTodayKey()));
-  supUnsub = onSnapshot(q, (snapshot) => {
-    const rows = [];
-    snapshot.forEach((d) => rows.push(d.data()));
-    buildSupervisorTableFromFirestore(rows);
-  });
-}
-
-/* =========================
-   LOCAL STORAGE
-========================= */
-function saveState() {
-  if (!state) return;
-  localStorage.setItem(STATE_KEY, JSON.stringify(state));
-}
-
-function loadStateForToday(userId) {
-  const raw = localStorage.getItem(STATE_KEY);
-  if (!raw) return null;
-  try {
-    const s = JSON.parse(raw);
-    if (s && s.userId === userId && s.day === getTodayKey()) return s;
-  } catch {}
-  return null;
-}
-
-/* =========================
-   FLOATING CHAT (SHELL ONLY)
-========================= */
-function closeFloatingChat() {
-  document.getElementById("float-chat-panel")?.classList.add("hidden");
-}
-function toggleFloatingChat() {
-  if (!currentUser) return;
-  const panel = document.getElementById("float-chat-panel");
-  if (!panel) return;
-  panel.classList.toggle("hidden");
-}
-function hookFloatingChatShell() {
-  const toggleBtn = document.getElementById("float-chat-toggle");
-  const closeBtn = document.getElementById("float-chat-close");
-  const panel = document.getElementById("float-chat-panel");
-
-  toggleBtn?.addEventListener("click", () => toggleFloatingChat());
-  closeBtn?.addEventListener("click", () => closeFloatingChat());
-
-  // outside click closes
-  document.addEventListener("mousedown", (e) => {
-    if (!panel || panel.classList.contains("hidden")) return;
-    if (panel.contains(e.target)) return;
-    if (toggleBtn && (e.target === toggleBtn || toggleBtn.contains(e.target))) return;
-    closeFloatingChat();
-  });
-
-  // ESC closes
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeFloatingChat();
-  });
-
-  // on user changed close
-  window.addEventListener("telesyriana:user-changed", () => closeFloatingChat());
-}
-
-/* =========================
-   PAGES SWITCHING
-========================= */
-function forceEnableMessagesInputIfLoggedIn() {
-  // fallback only (messages.js should manage this)
-  if (!currentUser) return;
-  const page = document.getElementById("page-messages");
-  if (!page || page.classList.contains("hidden")) return;
-
-  const input = document.getElementById("chat-input");
-  const form = document.getElementById("chat-form");
-  const btn = form?.querySelector(".chat-send-btn");
-
-  if (input) input.disabled = false;
-  if (btn) btn.disabled = false;
-}
-
-function switchPage(pageId) {
-  document.querySelectorAll(".page-section").forEach((pg) => pg.classList.add("hidden"));
-  const target = document.getElementById(`page-${pageId}`);
-  if (!target) {
-    console.warn(`Page not found: page-${pageId}. Check your HTML IDs.`);
-    return;
-  }
-  target.classList.remove("hidden");
-
-  document.querySelectorAll(".nav-link[data-page]").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.page === pageId);
-  });
-
-  const floatToggle = document.getElementById("float-chat-toggle");
-  if (floatToggle) {
-    if (!currentUser || pageId === "messages") {
-      floatToggle.classList.add("hidden");
-      closeFloatingChat();
-    } else {
-      floatToggle.classList.remove("hidden");
+      show(loginScreen);
+      hide(dashboardScreen);
+      if (mainNav) mainNav.classList.add("hidden");
+      stopTicker();
     }
   }
 
-  // ✅ fallback: if logged-in and on messages, ensure input is enabled
-  if (pageId === "messages") {
-    setTimeout(forceEnableMessagesInputIfLoggedIn, 50);
-  }
-}
-
-/* =========================
-   LOGIN / LOGOUT
-========================= */
-function showError(msg) {
-  const box = document.getElementById("login-error");
-  if (!box) return;
-  box.textContent = msg;
-  box.classList.remove("hidden");
-}
-
-function handleLogin(e) {
-  e.preventDefault();
-
-  const id = document.getElementById("ccmsId")?.value?.trim() || "";
-  const pw = document.getElementById("password")?.value || "";
-
-  if (!USERS[id]) return showError("User not found.");
-  if (USERS[id].password !== pw) return showError("Incorrect password.");
-
-  currentUser = { id, name: USERS[id].name, role: USERS[id].role };
-  localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
-
-  document.getElementById("login-error")?.classList.add("hidden");
-
-  // ✅ important: let messages.js re-read user and enable chat
-  notifyUserChanged();
-
-  initStateForUser()
-    .then(showDashboard)
-    .catch((err) => alert("Init error: " + (err?.message || err)));
-}
-
-async function handleLogout() {
-  try {
-    closeFloatingChat();
-
-    if (currentUser && state) {
-      const now = Date.now();
-      applyElapsedToState(now);
-      state.status = "unavailable";
-      state.lastStatusChange = now;
-      saveState();
-      await syncStateToFirestore(recomputeLiveUsage(now));
-    }
-
-    localStorage.removeItem(USER_KEY);
-
-    if (timerId) clearInterval(timerId);
-    timerId = null;
-
-    if (clockIntervalId) clearInterval(clockIntervalId);
-    clockIntervalId = null;
-
-    if (supUnsub) supUnsub();
-    supUnsub = null;
-
-    currentUser = null;
-    state = null;
-
-    // ✅ notify after logout too
-    notifyUserChanged();
-    showLogin();
-  } catch (err) {
-    alert("Logout error: " + (err?.message || err));
-  }
-}
-
-/* =========================
-   STATUS CHANGE
-========================= */
-async function handleStatusChange(e) {
-  if (!state || !currentUser) return;
-
-  const newStatus = e.target.value;
-  const now = Date.now();
-
-  if (newStatus === "break" && state.breakUsedMinutes >= BREAK_LIMIT_MIN - 0.01) {
-    alert("Daily break limit (45 minutes) already reached.");
-    e.target.value = state.status;
-    return;
-  }
-
-  applyElapsedToState(now);
-  state.status = newStatus;
-  state.lastStatusChange = now;
-  saveState();
-
-  try {
-    const live = recomputeLiveUsage(now);
-    await syncStateToFirestore(live);
-    updateDashboardUI();
-  } catch (err) {
-    alert("Status update failed: " + (err?.message || err));
-  }
-}
-
-/* =========================
-   INIT SESSION
-========================= */
-async function initStateForUser() {
-  const today = getTodayKey();
-  const now = Date.now();
-
-  const local = loadStateForToday(currentUser.id);
-  if (local) {
-    state = local;
-    finishInit(now);
-    return;
-  }
-
-  const docId = `${today}_${currentUser.id}`;
-  const ref = doc(collection(db, AGENT_DAYS_COL), docId);
-  const snap = await getDoc(ref);
-
-  if (snap.exists()) {
-    const d = snap.data();
-    state = {
-      userId: currentUser.id,
-      day: today,
-      status: d.status || "in_operation",
-      lastStatusChange: now,
-      breakUsedMinutes: d.breakUsedMinutes || 0,
-      operationMinutes: d.operationMinutes || 0,
-      meetingMinutes: d.meetingMinutes || 0,
-      handlingMinutes: d.handlingMinutes || 0,
-      unavailableMinutes: d.unavailableMinutes || 0,
-      loginTime: d.loginTime || now,
-    };
-  } else {
-    state = {
-      userId: currentUser.id,
-      day: today,
-      status: "in_operation",
-      lastStatusChange: now,
-      breakUsedMinutes: 0,
-      operationMinutes: 0,
-      meetingMinutes: 0,
-      handlingMinutes: 0,
-      unavailableMinutes: 0,
-      loginTime: now,
-    };
-  }
-
-  saveState();
-  finishInit(now);
-}
-
-function finishInit(now) {
-  if (!currentUser) return;
-
-  if (currentUser.role === "supervisor") subscribeSupervisorDashboard();
-
-  loadUserProfile().catch(() => {});
-  startTimer();
-
-  const live = recomputeLiveUsage(now);
-
-  updateBreakUI(live.breakUsed);
-  updateStatusMinutesUI(live);
-  updateWorkUI(computeWorkedMinutes(live));
-
-  renderClockWidget();
-  buildMiniCalendar();
-  hookCalendarButtons();
-
-  syncStateToFirestore(live).catch((err) => {
-    console.warn("Initial sync failed:", err);
-  });
-}
-
-/* =========================
-   TIMER
-========================= */
-function startTimer() {
-  if (timerId) clearInterval(timerId);
-  timerId = setInterval(tick, 10000);
-  tick();
-}
-
-async function tick() {
-  if (!state || !currentUser) return;
-
-  const now = Date.now();
-  const live = recomputeLiveUsage(now);
-
-  if (state.status === "break" && live.breakUsed >= BREAK_LIMIT_MIN) {
-    applyElapsedToState(now);
-    state.status = "unavailable";
-    state.lastStatusChange = now;
-    saveState();
-    alert("Break limit reached. Status set to Unavailable.");
-  }
-
-  updateBreakUI(live.breakUsed);
-  updateStatusMinutesUI(live);
-  updateWorkUI(computeWorkedMinutes(live));
-
-  try {
-    await syncStateToFirestore(live);
-  } catch (err) {
-    console.warn("Sync failed:", err);
-  }
-}
-
-/* =========================
-   DASHBOARD UI
-========================= */
-function updateDashboardUI() {
-  if (!currentUser || !state) return;
-
-  const welcomeTitle = document.getElementById("welcome-title");
-  const welcomeSubtitle = document.getElementById("welcome-subtitle");
-  const statusValue = document.getElementById("status-value");
-  const statusSelect = document.getElementById("status-select");
-
-  if (welcomeTitle) welcomeTitle.textContent = `Welcome, ${currentUser.name}`;
-  if (welcomeSubtitle) {
-    welcomeSubtitle.textContent = `Logged in as ${currentUser.role.toUpperCase()} (CCMS: ${currentUser.id})`;
-  }
-
-  if (statusValue) {
-    statusValue.textContent = statusLabel(state.status);
-    statusValue.className = `status-value status-${state.status}`;
-  }
-  if (statusSelect) statusSelect.value = state.status;
-
-  const live = recomputeLiveUsage(Date.now());
-  updateBreakUI(live.breakUsed);
-  updateStatusMinutesUI(live);
-  updateWorkUI(computeWorkedMinutes(live));
-
-  const supPanel = document.getElementById("supervisor-panel");
-  if (supPanel) supPanel.classList.toggle("hidden", currentUser.role !== "supervisor");
-}
-
-function updateBreakUI(used) {
-  const usedMin = Math.floor(used);
-  const remaining = Math.max(0, BREAK_LIMIT_MIN - usedMin);
-
-  document.getElementById("break-used") && (document.getElementById("break-used").textContent = usedMin);
-  document.getElementById("break-remaining") && (document.getElementById("break-remaining").textContent = remaining);
-
-  const breakText = document.getElementById("break-text");
-  if (breakText) breakText.textContent = `${usedMin} / ${BREAK_LIMIT_MIN}`;
-
-  setRing((usedMin / BREAK_LIMIT_MIN) * 100);
-}
-
-function updateStatusMinutesUI(live) {
-  const opEl = document.getElementById("op-min");
-  const meetEl = document.getElementById("meet-min");
-  const handEl = document.getElementById("hand-min");
-
-  if (opEl) opEl.textContent = formatDuration(live.operation);
-  if (meetEl) meetEl.textContent = formatDuration(live.meeting);
-  if (handEl) handEl.textContent = formatDuration(live.handling);
-}
-
-/* =========================
-   SUPERVISOR TABLE
-========================= */
-function buildSupervisorTableFromFirestore(rows) {
-  const body = document.getElementById("sup-table-body");
-  if (!body) return;
-  body.innerHTML = "";
-
-  const totals = { in_operation: 0, break: 0, meeting: 0, handling: 0, unavailable: 0 };
-
-  rows
-    .filter((r) => r.role === "agent")
-    .forEach((r) => {
-      const status = r.status || "unavailable";
-      totals[status] = (totals[status] || 0) + 1;
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.name || ""}</td>
-        <td>${r.userId || ""}</td>
-        <td>${String(r.role || "").toUpperCase()}</td>
-        <td><span class="sup-status-pill status-${status}">${statusLabel(status)}</span></td>
-        <td>${formatDuration(r.operationMinutes || 0)}</td>
-        <td>${Math.floor(r.breakUsedMinutes || 0)} min</td>
-        <td>${formatDuration(r.meetingMinutes || 0)}</td>
-        <td>${formatDuration(r.unavailableMinutes || 0)}</td>
-        <td>${r.loginTime ? new Date(r.loginTime).toLocaleString() : "Never"}</td>
-      `;
-      body.appendChild(tr);
-    });
-
-  const sumOp = document.getElementById("sum-op");
-  const sumBreak = document.getElementById("sum-break");
-  const sumMeet = document.getElementById("sum-meet");
-  const sumUnavail = document.getElementById("sum-unavail");
-
-  if (sumOp) sumOp.textContent = totals.in_operation || 0;
-  if (sumBreak) sumBreak.textContent = totals.break || 0;
-  if (sumMeet) sumMeet.textContent = totals.meeting || 0;
-  if (sumUnavail) sumUnavail.textContent = totals.unavailable || 0;
-}
-
-/* =========================
-   SETTINGS
-========================= */
-function applyTheme(gender) {
-  const g = String(gender || "").toLowerCase().trim();
-  document.body.removeAttribute("data-theme");
-  if (g === "male" || g === "female") document.body.setAttribute("data-theme", g);
-}
-
-async function loadUserProfile() {
-  if (!currentUser) return;
-
-  const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
-  const snap = await getDoc(ref);
-
-  const nameEl = document.getElementById("set-name");
-  if (nameEl) nameEl.value = currentUser.name;
-
-  const bdayEl = document.getElementById("set-birthday");
-  const notesEl = document.getElementById("set-notes");
-  const genderEl = document.getElementById("set-gender");
-
-  if (snap.exists()) {
-    const d = snap.data();
-    if (bdayEl) bdayEl.value = d.birthday || "";
-    if (notesEl) notesEl.value = d.notes || "";
-    if (genderEl) genderEl.value = d.gender || "";
-    applyTheme(d.gender);
-  } else {
-    if (genderEl) genderEl.value = "";
-    applyTheme("");
-  }
-}
-
-async function handleSettingsSave(e) {
-  e.preventDefault();
-  if (!currentUser) return;
-
-  const birthday = document.getElementById("set-birthday")?.value || "";
-  const notes = document.getElementById("set-notes")?.value || "";
-  const gender = document.getElementById("set-gender")?.value || "";
-
-  const ref = doc(collection(db, USER_PROFILE_COL), currentUser.id);
-
-  await setDoc(
-    ref,
-    { userId: currentUser.id, name: currentUser.name, birthday, notes, gender, updatedAt: serverTimestamp() },
-    { merge: true }
-  );
-
-  applyTheme(gender);
-  alert("Settings saved successfully.");
-}
-
-/* =========================
-   VIEW SWITCHING
-========================= */
-function showLogin() {
-  document.getElementById("dashboard-screen")?.classList.add("hidden");
-  document.getElementById("login-screen")?.classList.remove("hidden");
-  document.getElementById("main-nav")?.classList.add("hidden");
-
-  document.getElementById("float-chat-toggle")?.classList.add("hidden");
-  closeFloatingChat();
-
-  if (clockIntervalId) clearInterval(clockIntervalId);
-  clockIntervalId = null;
-}
-
-function showDashboard() {
-  document.getElementById("login-screen")?.classList.add("hidden");
-  document.getElementById("dashboard-screen")?.classList.remove("hidden");
-  document.getElementById("main-nav")?.classList.remove("hidden");
-
-  switchPage("home");
-  updateDashboardUI();
-
-  renderClockWidget();
-  buildMiniCalendar();
-  hookCalendarButtons();
-
-  if (!clockIntervalId) clockIntervalId = setInterval(renderClockWidget, 1000);
-}
-
-/* =========================
-   BOOT
-========================= */
-document.addEventListener("DOMContentLoaded", () => {
-  if (appInited) return;
-  appInited = true;
-
-  if (!ensureAllowedDeviceOrBlock()) return;
-
-  document.querySelectorAll(".nav-link").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      const page = btn.dataset.page;
-      if (!page) return;
-      e.preventDefault();
-      switchPage(page);
-    });
-  });
-
-  document.getElementById("login-form")?.addEventListener("submit", handleLogin);
-  document.getElementById("logout-btn")?.addEventListener("click", handleLogout);
-  document.getElementById("status-select")?.addEventListener("change", handleStatusChange);
-  document.getElementById("settings-form")?.addEventListener("submit", handleSettingsSave);
-
-  hookFloatingChatShell();
-
-  // ✅ restore session
-  const savedUser = localStorage.getItem(USER_KEY);
-  if (savedUser) {
-    try {
-      const u = JSON.parse(savedUser);
-      if (u?.id && USERS[u.id]) {
-        currentUser = u;
-
-        // ✅ IMPORTANT: tell messages.js we have a user (enables send)
-        notifyUserChanged();
-
-        initStateForUser()
-          .then(showDashboard)
-          .catch((err) => alert("Restore init error: " + (err?.message || err)));
-        return;
+  function attemptLogin(username, password) {
+    const u = (username || "").trim().toLowerCase();
+    const p = (password || "").trim();
+
+    const found = USERS.find((x) => x.username === u && x.password === p);
+    if (!found) {
+      if (loginAlert) {
+        loginAlert.classList.remove("hidden");
+        loginAlert.textContent = "Invalid username or password.";
       }
-    } catch {}
+      return;
+    }
+    if (loginAlert) loginAlert.classList.add("hidden");
+    setAuth(true, found);
   }
 
-  showLogin();
-});
+  function logout() {
+    setAuth(false, null);
+    if (loginUser) loginUser.value = "";
+    if (loginPass) loginPass.value = "";
+  }
 
+  /* -------------------------
+     Navigation wiring
+  ------------------------- */
+  function wireNav() {
+    $$(".nav-link[data-page]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const page = btn.dataset.page;
+        setPage(page);
+      });
+    });
 
+    if (logoutBtn) logoutBtn.addEventListener("click", logout);
+  }
+
+  /* -------------------------
+     Status logic
+  ------------------------- */
+  function statusLabel(key) {
+    const map = {
+      in_operation: "In Operation",
+      break: "In Break",
+      meeting: "In Meeting",
+      handling: "Handling",
+      unavailable: "Unavailable",
+    };
+    return map[key] || key;
+  }
+
+  function renderStatus() {
+    if (statusValue) {
+      statusValue.className = "status-value";
+      statusValue.classList.add(`status-${state.status}`);
+      statusValue.textContent = statusLabel(state.status);
+    }
+    if (statusSelect) {
+      statusSelect.value = state.status;
+    }
+  }
+
+  function wireStatus() {
+    if (!statusSelect) return;
+    statusSelect.addEventListener("change", () => {
+      state.status = statusSelect.value;
+      renderStatus();
+    });
+  }
+
+  /* -------------------------
+     Dashboard numbers
+  ------------------------- */
+  function mmToText(min) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    if (h <= 0) return `${m} min`;
+    return `${h} hrs ${m} min`;
+  }
+
+  function renderDashboardNumbers() {
+    const remain = Math.max(0, state.breakLimitMin - state.breakUsedMin);
+    safeText(breakUsedEl, `${state.breakUsedMin} / ${state.breakLimitMin} min`);
+    safeText(breakRemainEl, `${remain} min`);
+
+    safeText(opEl, mmToText(state.operationMin));
+    safeText(meetingEl, mmToText(state.meetingMin));
+    safeText(handlingEl, mmToText(state.handlingMin));
+  }
+
+  /* -------------------------
+     Widgets (Clock / Today / Date / Mini Calendar)
+     Fixes the "ugly list" issue by rendering plain text (no raw inputs)
+  ------------------------- */
+  function renderWidgets() {
+    const now = new Date();
+
+    if (widgetClock) {
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      widgetClock.textContent = `${hh}:${mm}`;
+    }
+
+    if (widgetToday) {
+      widgetToday.textContent = now.toLocaleDateString(undefined, { weekday: "long" });
+    }
+
+    if (widgetDate) {
+      widgetDate.textContent = now.toLocaleDateString(undefined, {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    }
+
+    // Optional mini calendar if your HTML has it
+    if (widgetCalendar) {
+      // If you already have a custom calendar elsewhere, ignore this.
+      // Here we keep it minimal & safe.
+      // Expected structure:
+      // #mini-cal .mini-cal-weekdays
+      // #mini-cal .mini-cal-grid
+      const weekdays = $(".mini-cal-weekdays", widgetCalendar);
+      const grid = $(".mini-cal-grid", widgetCalendar);
+      if (!weekdays || !grid) return;
+
+      weekdays.innerHTML = "";
+      ["M", "T", "W", "T", "F", "S", "S"].forEach((d) => {
+        const el = document.createElement("div");
+        el.textContent = d;
+        weekdays.appendChild(el);
+      });
+
+      grid.innerHTML = "";
+      const y = now.getFullYear();
+      const m = now.getMonth();
+
+      const first = new Date(y, m, 1);
+      const last = new Date(y, m + 1, 0);
+
+      // Monday-based index:
+      let start = first.getDay(); // 0=Sun
+      start = (start + 6) % 7; // convert to 0=Mon
+
+      // previous month days to fill
+      const prevLast = new Date(y, m, 0).getDate();
+      for (let i = start - 1; i >= 0; i--) {
+        const d = document.createElement("div");
+        d.className = "mini-day muted";
+        d.textContent = String(prevLast - i);
+        grid.appendChild(d);
+      }
+
+      // current month days
+      for (let day = 1; day <= last.getDate(); day++) {
+        const d = document.createElement("div");
+        d.className = "mini-day";
+        d.textContent = String(day);
+        if (day === now.getDate()) d.classList.add("today");
+        grid.appendChild(d);
+      }
+
+      // next month filler to complete grid nice
+      const total = grid.children.length;
+      const need = (7 - (total % 7)) % 7;
+      for (let i = 1; i <= need; i++) {
+        const d = document.createElement("div");
+        d.className = "mini-day muted";
+        d.textContent = String(i);
+        grid.appendChild(d);
+      }
+    }
+  }
+
+  /* -------------------------
+     Tasks (optional mini kanban)
+     Works only if your HTML has:
+     #task-title-input, #task-priority-select, #task-add-btn
+     columns: [data-kanban="todo|doing|done"] with .kanban-list inside
+  ------------------------- */
+  function wireTasks() {
+    const titleInput = byId("task-title-input");
+    const prioSelect = byId("task-priority-select");
+    const addBtn = byId("task-add-btn");
+
+    const todoList = $('[data-kanban="todo"] .kanban-list');
+    const doingList = $('[data-kanban="doing"] .kanban-list');
+    const doneList = $('[data-kanban="done"] .kanban-list');
+
+    if (!titleInput || !addBtn || !todoList) return;
+
+    function makeCard(title, prio) {
+      const card = document.createElement("div");
+      card.className = "task-card";
+      card.draggable = true;
+      card.innerHTML = `
+        <div class="task-row">
+          <div class="task-title">${escapeHtml(title)}</div>
+          <div class="task-actions">
+            <button class="task-btn" data-act="del">✕</button>
+          </div>
+        </div>
+        <div class="task-meta">${prio ? `Priority: ${prio}` : ""}</div>
+      `;
+
+      card.addEventListener("dragstart", () => card.classList.add("dragging"));
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+
+      card.querySelector('[data-act="del"]').addEventListener("click", () => {
+        card.remove();
+      });
+
+      return card;
+    }
+
+    addBtn.addEventListener("click", () => {
+      const title = (titleInput.value || "").trim();
+      if (!title) return;
+      const prio = prioSelect ? prioSelect.value : "";
+      todoList.appendChild(makeCard(title, prio));
+      titleInput.value = "";
+    });
+
+    [todoList, doingList, doneList].filter(Boolean).forEach((list) => {
+      list.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        list.classList.add("drag-over");
+        const dragging = $(".task-card.dragging");
+        if (dragging) list.appendChild(dragging);
+      });
+      list.addEventListener("dragleave", () => list.classList.remove("drag-over"));
+      list.addEventListener("drop", () => list.classList.remove("drag-over"));
+    });
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  /* -------------------------
+     Theme (optional)
+     If you have a checkbox toggle, it will set body[data-theme="male"]
+  ------------------------- */
+  function wireTheme() {
+    if (!themeToggle) return;
+
+    themeToggle.addEventListener("change", () => {
+      document.body.setAttribute("data-theme", themeToggle.checked ? "male" : "female");
+    });
+  }
+
+  /* -------------------------
+     Timer tick (basic simulation)
+  ------------------------- */
+  function tick() {
+    // update counters (very simple)
+    // You can replace with real tracking logic later
+    if (state.status === "break") state.breakUsedMin += 1;
+    if (state.status === "in_operation") state.operationMin += 1;
+    if (state.status === "meeting") state.meetingMin += 1;
+    if (state.status === "handling") state.handlingMin += 1;
+
+    renderAll();
+  }
+
+  function startTicker() {
+    stopTicker();
+    // every 60 seconds
+    state.timer = setInterval(tick, 60_000);
+  }
+
+  function stopTicker() {
+    if (state.timer) clearInterval(state.timer);
+    state.timer = null;
+  }
+
+  function renderAll() {
+    renderStatus();
+    renderDashboardNumbers();
+    renderWidgets();
+  }
+
+  /* -------------------------
+     Boot
+  ------------------------- */
+  function boot() {
+    wireNav();
+    wireStatus();
+    wireTasks();
+    wireTheme();
+
+    // login handling
+    if (loginForm) {
+      loginForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        attemptLogin(loginUser?.value, loginPass?.value);
+      });
+    }
+
+    // auto start logged out
+    setAuth(false, null);
+
+    // optional: quick dev auto-login if you want:
+    // setAuth(true, USERS[0]);
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+})();
