@@ -589,6 +589,11 @@ function hookSearch(inputEl, clearBtn, scopeRoot) {
 }
 
 /* ---------------- Floating UI build (inject) ---------------- */
+function setChatOnlyMode(on) {
+  const page = document.getElementById("page-messages");
+  if (!page) return;
+  page.classList.toggle("chat-only", !!on);
+}
 
 function buildFloatingUIIfNeeded() {
   floating.toggleBtn = document.getElementById("float-chat-toggle");
@@ -804,6 +809,19 @@ function initMainMessagesPage() {
   setHeader(main.nameEl, main.descEl, "Messages", "Start chatting…");
   if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
   setInputEnabled(main.formEl, main.inputEl, false);
+  // Floating added Maunally
+document.getElementById("chat-back")?.addEventListener("click", () => {
+  // رجّع القائمة
+  setChatOnlyMode(false);
+
+  // (اختياري) إذا بدك تخلي الشات فاضي وتطلب اختيار جديد:
+  resetRuntime(mainChat);
+  if (main.listEl) main.listEl.innerHTML = "";
+  setHeader(main.nameEl, main.descEl, "Messages", "Start chatting…");
+  if (main.listEl && main.emptyEl) setEmptyState(main.emptyEl, main.listEl, true);
+  setInputEnabled(main.formEl, main.inputEl, false);
+  clearActiveButtons(document);
+});
 
   // Rooms click (page)
   document.querySelectorAll("#page-messages .chat-room").forEach((btn) => {
@@ -1003,6 +1021,7 @@ function handleUserChanged() {
     if (floating.listEl) floating.listEl.innerHTML = "";
     setHeader(floating.titleEl, floating.noteEl, "TeleSyriana", "Select a room or DM");
     setInputEnabled(floating.formEl, floating.inputEl, false);
+    setChatOnlyMode(true);
   }
 }
 
@@ -1028,4 +1047,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // login/logout without refresh
 window.addEventListener("telesyriana:user-changed", handleUserChanged);
+
 
