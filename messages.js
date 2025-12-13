@@ -1,4 +1,11 @@
-// messages.js – FINAL
+// messages.js – Firestore chat
+// ✔ Lazy load
+// ✔ Rooms + DMs
+// ✔ Status dots
+// ✔ DM reorder ONLY after sending message
+// ✔ Search filter
+// ✔ Glass sidebar compatible
+
 import { db, fs } from "./firebase.js";
 
 const { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } = fs;
@@ -7,288 +14,307 @@ const USER_KEY = "telesyrianaUser";
 const MESSAGES_COL = "globalMessages";
 const AGENT_DAYS_COL = "agentDays";
 
-/* =========================
-   State
-========================= */
+// recents per user
+const RECENTS_KEY_PREFIX = "telesyrianaChatRecents";
+
+const PAGE_SIZE = 50;
+const MAX_RENDER = 600;
+
 let currentUser = null;
-let activeChat = null; // { type:"room"|"dm", roomId, otherId? }
+let activeChat = null;
 
 let unsubscribeMain = null;
+let unsubscribeFloat = null;
 let unsubscribeStatus = null;
 
-/* =========================
-   Recents (LOCAL)
-========================= */
-const RECENTS_KEY = uid => `telesyriana-recents:${uid}`;
+let roomCache = [];
+let renderedCount = 0;
+let scrollBoundEl = null;
 
-/* =========================
-   Helpers
-========================= */
-function getUserFromStorage(){
-  try{
-    const u = JSON.parse(localStorage.getItem(USER_KEY));
-    if(u?.id) return u;
-  }catch{}
-  return null;
+let dmListEl = null;
+
+/* ---------------- helpers ---------------- */
+
+function getUserFromStorage() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    const u = JSON.parse(raw);
+    return u?.id ? u : null;
+  } catch {
+    return null;
+  }
 }
 
-function setCurrentUser(){
+function setCurrentUser() {
   currentUser = getUserFromStorage();
 }
 
-function dmRoomId(a,b){
-  const x=String(a), y=String(b);
-  return x<y ? `dm_${x}_${y}` : `dm_${y}_${x}`;
-}
-
-function getOtherId(roomId, myId){
-  const p = roomId.split("_");
-  if(p.length!==3) return null;
-  return p[1]===String(myId) ? p[2] : p[1];
-}
-
-function formatTime(ts){
-  if(!ts) return "";
+function formatTime(ts) {
+  if (!ts) return "";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function setHeader(nameEl, descEl, title, desc){
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function dmRoomId(a, b) {
+  const x = String(a), y = String(b);
+  return x < y ? `dm_${x}_${y}` : `dm_${y}_${x}`;
+}
+
+function getOtherIdFromDmRoom(roomId, myId) {
+  const p = roomId.split("_");
+  if (p.length !== 3) return null;
+  return String(myId) === p[1] ? p[2] : p[1];
+}
+
+function statusToDotClass(status) {
+  if (status === "in_operation" || status === "handling") return "dot-online";
+  if (status === "meeting" || status === "break") return "dot-warn";
+  return "dot-offline";
+}
+
+/* ---------------- UI helpers ---------------- */
+
+function clearActiveButtons() {
+  document.querySelectorAll(".chat-room, .chat-dm").forEach(b => {
+    b.classList.remove("active", "chat-item-active");
+  });
+}
+
+function setActiveButton(el) {
+  clearActiveButtons();
+  el?.classList.add("active", "chat-item-active");
+}
+
+function setHeader(nameEl, descEl, title, desc) {
   nameEl.textContent = title || "Messages";
-  descEl.textContent = desc || "";
+  descEl.textContent = desc || "Start chatting…";
 }
 
-function setEmptyState(emptyEl, listEl, on){
+function setEmptyState(emptyEl, listEl, on) {
   emptyEl.style.display = on ? "block" : "none";
   listEl.style.display = on ? "none" : "flex";
 }
 
-function setInputEnabled(formEl, inputEl, on){
-  inputEl.disabled = !on;
-  formEl.querySelector("button").disabled = !on;
+function setInputEnabled(formEl, inputEl, enabled) {
+  inputEl.disabled = !enabled;
+  formEl.querySelector("button")?.toggleAttribute("disabled", !enabled);
 }
 
-/* =========================
-   UI helpers
-========================= */
-function clearActive(){
-  document.querySelectorAll(".chat-room,.chat-dm").forEach(b=>{
-    b.classList.remove("active","chat-item-active");
-  });
+/* ---------------- Messages render ---------------- */
+
+function getInitials(name = "") {
+  return name.split(" ").slice(0, 2).map(n => n[0]).join("").toUpperCase();
 }
 
-function setActive(btn){
-  clearActive();
-  btn.classList.add("active","chat-item-active");
-}
-
-/* =========================
-   Messages render
-========================= */
-function createMsg(m){
+function createMessageNode(m) {
   const wrap = document.createElement("div");
   wrap.className = "chat-message";
-  if(m.userId===currentUser.id) wrap.classList.add("me");
+  if (m.userId === currentUser?.id) wrap.classList.add("me");
 
   wrap.innerHTML = `
-    <div class="msg-avatar">${(m.name||"U").slice(0,2).toUpperCase()}</div>
+    <div class="msg-avatar">${getInitials(m.name)}</div>
     <div class="msg-body">
       <div class="msg-meta">
-        <span class="msg-name">${m.name||""}</span>
+        <span class="msg-name">${m.name}</span>
         <span>• ${formatTime(m.ts)}</span>
       </div>
-      <div class="chat-message-text"></div>
+      <div class="chat-message-text">${m.text}</div>
     </div>
   `;
-  wrap.querySelector(".chat-message-text").textContent = m.text;
   return wrap;
 }
 
-/* =========================
-   Firestore subscribe
-========================= */
-function unsubscribeMainChat(){
-  unsubscribeMain?.();
-  unsubscribeMain = null;
+function renderFresh(listEl, msgs) {
+  listEl.innerHTML = "";
+  msgs.forEach(m => listEl.appendChild(createMessageNode(m)));
+  listEl.scrollTop = listEl.scrollHeight;
 }
 
-function subscribeMain(roomId, listEl){
-  unsubscribeMainChat();
+/* ---------------- Firestore ---------------- */
+
+function unsubscribeAllMain() {
+  unsubscribeMain?.();
+  unsubscribeMain = null;
+  roomCache = [];
+  renderedCount = 0;
+  scrollBoundEl = null;
+}
+
+function subscribeMainToRoom(roomId, listEl) {
+  unsubscribeAllMain();
 
   const q = query(
     collection(db, MESSAGES_COL),
-    where("room","==",roomId),
-    orderBy("ts","asc")
+    where("room", "==", roomId),
+    orderBy("ts", "desc")
   );
 
-  unsubscribeMain = onSnapshot(q,snap=>{
-    listEl.innerHTML="";
-    const frag=document.createDocumentFragment();
-    let lastMsg=null;
+  unsubscribeMain = onSnapshot(q, snap => {
+    const all = [];
+    snap.forEach(d => all.push({ id: d.id, ...d.data() }));
+    all.reverse();
 
-    snap.forEach(d=>{
-      const m={id:d.id,...d.data()};
-      lastMsg=m;
-      frag.appendChild(createMsg(m));
-    });
-
-    listEl.appendChild(frag);
-    listEl.scrollTop=listEl.scrollHeight;
-
-    // ✅ bump ONLY when message exists (send OR receive)
-    if(activeChat?.type==="dm" && lastMsg){
-      const otherId = getOtherId(roomId, currentUser.id);
-      if(otherId) bumpRecent(otherId, lastMsg.ts);
-    }
+    roomCache = all;
+    renderedCount = Math.min(PAGE_SIZE, roomCache.length);
+    const start = Math.max(0, roomCache.length - renderedCount);
+    renderFresh(listEl, roomCache.slice(start));
   });
 }
 
-/* =========================
-   Recents reorder (DMs)
-========================= */
-function loadRecents(){
-  try{
-    return JSON.parse(localStorage.getItem(RECENTS_KEY(currentUser.id))) || {};
-  }catch{
+/* ---------------- Recents (ONLY on send) ---------------- */
+
+function recentsKey() {
+  return `${RECENTS_KEY_PREFIX}:${currentUser.id}`;
+}
+
+function loadRecents() {
+  try {
+    return JSON.parse(localStorage.getItem(recentsKey())) || {};
+  } catch {
     return {};
   }
 }
 
-function saveRecents(map){
-  localStorage.setItem(RECENTS_KEY(currentUser.id), JSON.stringify(map));
+function saveRecents(map) {
+  localStorage.setItem(recentsKey(), JSON.stringify(map));
 }
 
-function bumpRecent(otherId, ts){
-  if(!otherId) return;
+function bumpRecent(otherId) {
   const map = loadRecents();
-  map[otherId] = ts?.toMillis ? ts.toMillis() : Date.now();
+  map[otherId] = Date.now();
   saveRecents(map);
   applyDmOrder();
 }
 
-function applyDmOrder(){
-  const dmList=document.getElementById("dm-list");
-  if(!dmList || !currentUser) return;
+function applyDmOrder() {
+  if (!dmListEl) return;
 
-  const map=loadRecents();
-  const items=[...dmList.querySelectorAll(".chat-dm")];
+  const map = loadRecents();
+  const buttons = [...dmListEl.querySelectorAll(".chat-dm")];
 
-  items.sort((a,b)=>{
-    const ta=map[a.dataset.dm]||0;
-    const tb=map[b.dataset.dm]||0;
-    return tb-ta;
+  buttons.sort((a, b) => {
+    const ta = map[a.dataset.dm] || 0;
+    const tb = map[b.dataset.dm] || 0;
+    return tb - ta;
   });
 
-  items.forEach(i=>dmList.appendChild(i));
+  buttons.forEach(b => dmListEl.appendChild(b));
 }
 
-/* =========================
-   Search
-========================= */
-function hookSearch(){
-  const input=document.getElementById("chat-search");
-  if(!input) return;
+/* ---------------- Status dots ---------------- */
 
-  input.oninput=()=>{
-    const q=input.value.toLowerCase();
-    document.querySelectorAll(".chat-room,.chat-dm").forEach(b=>{
-      const t=b.innerText.toLowerCase();
-      b.style.display = (!q||t.includes(q)) ? "" : "none";
-    });
-  };
-}
-
-/* =========================
-   Status dots
-========================= */
-function subscribeStatusDots(){
+function subscribeStatusDots() {
   unsubscribeStatus?.();
 
-  const today = new Date().toISOString().slice(0,10);
-  const q=query(
-    collection(db,AGENT_DAYS_COL),
-    where("day","==",today)
+  const q = query(
+    collection(db, AGENT_DAYS_COL),
+    where("day", "==", getTodayKey())
   );
 
-  unsubscribeStatus=onSnapshot(q,snap=>{
-    document.querySelectorAll("[data-status-dot]").forEach(d=>{
-      d.className="status-dot dot-offline";
+  unsubscribeStatus = onSnapshot(q, snap => {
+    document.querySelectorAll("[data-status-dot]").forEach(dot => {
+      dot.className = "status-dot dot-offline";
     });
 
-    snap.forEach(doc=>{
-      const d=doc.data();
-      const dot=document.querySelector(`[data-status-dot="${d.userId}"]`);
-      if(!dot) return;
-
-      if(d.status==="in_operation"||d.status==="handling")
-        dot.classList.replace("dot-offline","dot-online");
-      else if(d.status==="break"||d.status==="meeting")
-        dot.classList.replace("dot-offline","dot-warn");
+    snap.forEach(doc => {
+      const d = doc.data();
+      const dot = document.querySelector(`[data-status-dot="${d.userId}"]`);
+      if (dot) dot.classList.add(statusToDotClass(d.status));
     });
   });
 }
 
-/* =========================
-   INIT
-========================= */
-document.addEventListener("DOMContentLoaded",()=>{
-  setCurrentUser();
-  if(!currentUser) return;
+/* ---------------- Search ---------------- */
 
-  const listEl=document.getElementById("chat-message-list");
-  const emptyEl=document.getElementById("chat-empty");
-  const nameEl=document.getElementById("chat-room-name");
-  const descEl=document.getElementById("chat-room-desc");
-  const formEl=document.getElementById("chat-form");
-  const inputEl=document.getElementById("chat-input");
+function hookSearch() {
+  const input = document.getElementById("chat-search");
+  const clear = document.getElementById("chat-search-clear");
+
+  const run = () => {
+    const q = input.value.toLowerCase();
+    document.querySelectorAll(".chat-room, .chat-dm").forEach(b => {
+      const t = b.textContent.toLowerCase();
+      b.style.display = t.includes(q) ? "" : "none";
+    });
+  };
+
+  input.addEventListener("input", run);
+  clear.addEventListener("click", () => {
+    input.value = "";
+    run();
+  });
+}
+
+/* ---------------- Init ---------------- */
+
+document.addEventListener("DOMContentLoaded", () => {
+  setCurrentUser();
+
+  const listEl = document.getElementById("chat-message-list");
+  const emptyEl = document.getElementById("chat-empty");
+  const nameEl = document.getElementById("chat-room-name");
+  const descEl = document.getElementById("chat-room-desc");
+  const formEl = document.getElementById("chat-form");
+  const inputEl = document.getElementById("chat-input");
+
+  dmListEl = document.getElementById("dm-list");
 
   hookSearch();
   applyDmOrder();
   subscribeStatusDots();
 
-  // Rooms
-  document.querySelectorAll(".chat-room").forEach(btn=>{
-    btn.onclick=()=>{
-      setActive(btn);
-      activeChat={type:"room", roomId:btn.dataset.room};
-      setHeader(nameEl,descEl,btn.innerText,"");
-      setEmptyState(emptyEl,listEl,false);
-      setInputEnabled(formEl,inputEl,true);
-      subscribeMain(activeChat.roomId,listEl);
+  document.querySelectorAll(".chat-room").forEach(btn => {
+    btn.onclick = () => {
+      const room = btn.dataset.room;
+      setActiveButton(btn);
+
+      activeChat = { type: "room", roomId: room };
+      setHeader(nameEl, descEl, btn.innerText, "");
+      setEmptyState(emptyEl, listEl, false);
+      setInputEnabled(formEl, inputEl, true);
+
+      subscribeMainToRoom(room, listEl);
     };
   });
 
-  // DMs
-  document.querySelectorAll(".chat-dm").forEach(btn=>{
-    btn.onclick=()=>{
-      const otherId=btn.dataset.dm;
-      const roomId=dmRoomId(currentUser.id,otherId);
+  document.querySelectorAll(".chat-dm").forEach(btn => {
+    btn.onclick = () => {
+      const otherId = btn.dataset.dm;
+      const roomId = dmRoomId(currentUser.id, otherId);
 
-      setActive(btn);
-      activeChat={type:"dm", roomId, otherId};
-      setHeader(nameEl,descEl,btn.innerText,"Direct message");
-      setEmptyState(emptyEl,listEl,false);
-      setInputEnabled(formEl,inputEl,true);
+      setActiveButton(btn);
 
-      // ❌ NO bump here
-      subscribeMain(roomId,listEl);
+      activeChat = { type: "dm", roomId, otherId };
+      setHeader(nameEl, descEl, btn.innerText, "Direct message");
+      setEmptyState(emptyEl, listEl, false);
+      setInputEnabled(formEl, inputEl, true);
+
+      subscribeMainToRoom(roomId, listEl);
     };
   });
 
-  // Send
-  formEl.onsubmit=async e=>{
+  formEl.onsubmit = async e => {
     e.preventDefault();
-    if(!inputEl.value.trim()||!activeChat) return;
+    if (!inputEl.value.trim()) return;
 
-    await addDoc(collection(db,MESSAGES_COL),{
-      room:activeChat.roomId,
-      text:inputEl.value.trim(),
-      userId:currentUser.id,
-      name:currentUser.name,
-      role:currentUser.role,
-      ts:serverTimestamp()
+    await addDoc(collection(db, MESSAGES_COL), {
+      room: activeChat.roomId,
+      text: inputEl.value.trim(),
+      userId: currentUser.id,
+      name: currentUser.name,
+      role: currentUser.role,
+      ts: serverTimestamp(),
     });
 
-    inputEl.value="";
+    if (activeChat.type === "dm") {
+      bumpRecent(activeChat.otherId);
+    }
+
+    inputEl.value = "";
   };
 });
