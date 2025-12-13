@@ -41,6 +41,14 @@ function groupVisibleToUser(group, userId) {
   return createdBy === uid || members.includes(uid);
 }
 
+function openModal() {
+  document.getElementById("group-modal")?.classList.remove("hidden");
+}
+
+function closeModal() {
+  document.getElementById("group-modal")?.classList.add("hidden");
+}
+
 function renderGroups() {
   const elGroupsList = document.getElementById("groups-list");
   if (!elGroupsList) return;
@@ -69,7 +77,7 @@ function renderGroups() {
   groups.forEach((g) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "chat-room chat-group"; // reuse same style
+    btn.className = "chat-room chat-group";
     btn.dataset.groupId = g.id;
 
     const avatarLetter = (g.name || "G").trim().slice(0, 1).toUpperCase();
@@ -85,7 +93,6 @@ function renderGroups() {
       </div>
     `;
 
-    // ✅ Open group: fire event for messages.js
     btn.addEventListener("click", () => {
       window.dispatchEvent(
         new CustomEvent("telesyriana:open-group", {
@@ -93,6 +100,7 @@ function renderGroups() {
             roomId: g.id,
             title: g.name,
             desc: g.rules ? `Rules: ${g.rules}` : "Group chat",
+            type: "group",
           },
         })
       );
@@ -109,17 +117,23 @@ function createGroupFromForm() {
   const myId = normalizeId(me?.id);
   if (!myId) throw new Error("Please login first");
 
+  // ✅ only supervisor can create
+  if ((me?.role || "").toLowerCase() !== "supervisor") {
+    throw new Error("Only supervisors can create groups");
+  }
+
   const name = (document.getElementById("group-name")?.value || "").trim();
   const rules = (document.getElementById("group-rules")?.value || "").trim();
 
-  // members: checkboxes name="group-members"
   const members = Array.from(
     document.querySelectorAll('input[name="group-members"]:checked')
-  ).map((cb) => normalizeId(cb.value)).filter(Boolean);
+  )
+    .map((cb) => normalizeId(cb.value))
+    .filter(Boolean);
 
   if (!name) throw new Error("Group name required");
 
-  // ✅ Always include creator in members (so creator sees group even لو نسي يحدد نفسه)
+  // ✅ Always include creator
   if (!members.includes(myId)) members.unshift(myId);
 
   const groups = loadGroups();
@@ -132,31 +146,26 @@ function createGroupFromForm() {
     createdBy: myId,
     createdByName: me?.name || "",
     createdAt: Date.now(),
-    // photo: demo optional (store file name only or add base64 later)
   };
 
-  groups.unshift(newGroup); // newest on top
+  groups.unshift(newGroup);
   saveGroups(groups);
 }
 
 function hookCreateForm() {
   const form = document.getElementById("group-create-form");
   const btnCreate = document.getElementById("group-create-btn");
-
   if (!form) return;
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
 
-    if (btnCreate) btnCreate.disabled = true; // prevent double create
+    if (btnCreate) btnCreate.disabled = true;
 
     try {
       createGroupFromForm();
-
       renderGroups();
-
-      // close modal (if exists)
-      document.getElementById("group-modal")?.classList.add("hidden");
+      closeModal();
       form.reset();
     } catch (err) {
       alert(err?.message || "Create failed");
@@ -166,8 +175,22 @@ function hookCreateForm() {
   });
 }
 
-// ✅ init safely (so it works even if script is in <head>)
+function hookOpenButton() {
+  const me = getCurrentUser();
+  const openBtn = document.getElementById("group-open-modal");
+  if (!openBtn) return;
+
+  // ✅ show only for supervisor
+  const isSup = (me?.role || "").toLowerCase() === "supervisor";
+  openBtn.style.display = isSup ? "" : "none";
+
+  openBtn.type = "button"; // important
+  openBtn.addEventListener("click", openModal);
+}
+
+// ✅ init
 document.addEventListener("DOMContentLoaded", () => {
+  hookOpenButton();
   hookCreateForm();
   renderGroups();
 });
@@ -178,6 +201,8 @@ window.resetGroupsDemo = function () {
   renderGroups();
 };
 
-// Optional: if login changes without refresh
-window.addEventListener("telesyriana:user-changed", renderGroups);
-
+// If login changes without refresh
+window.addEventListener("telesyriana:user-changed", () => {
+  hookOpenButton();
+  renderGroups();
+});
