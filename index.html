@@ -327,162 +327,169 @@
         </div>
       </section>
 
-      <!-- ✅ MESSAGES PAGE (THIS WAS THE BROKEN PART) -->
-      <section id="page-messages" class="page-section hidden">
-        <section class="card messages-card">
-          <div class="messages-layout">
+     <!-- ✅ MESSAGES PAGE -->
+<section id="page-messages" class="page-section hidden">
+  <section class="card messages-card">
+    <div class="messages-layout">
 
-            <!-- SIDEBAR (must be inside messages-layout) -->
-            <aside class="messages-sidebar glass">
+      <!-- SIDEBAR -->
+      <aside class="messages-sidebar glass">
 
-              <div class="ms-top">
-                <div class="ms-title">Messages</div>
+        <div class="ms-top">
+          <div class="ms-title">Messages</div>
 
-                <div class="ms-search">
-                  <input id="chat-search" type="text" placeholder="Search name / room…" autocomplete="off" />
-                  <button id="chat-search-x" class="ms-search-x" type="button" title="Clear">×</button>
-                </div>
-              </div>
-
-              <div class="messages-sidebar-header">Rooms</div>
-              <div id="room-list" class="ms-list">
-                <button class="chat-room" data-room="general">
-                  <div class="chat-row">
-                    <div class="chat-avatar role-room">#</div>
-                    <div class="chat-row-text">
-                      <div class="chat-room-title">General chat</div>
-                      <div class="chat-room-sub">All agents &amp; supervisors</div>
-                    </div>
-                  </div>
-                </button>
-
-                <button class="chat-room" data-room="supervisors">
-                  <div class="chat-row">
-                    <div class="chat-avatar role-supervisor">S</div>
-                    <div class="chat-row-text">
-                      <div class="chat-room-title">
-                        Supervisors <span class="room-badge">Supervisor only</span>
-                      </div>
-                      <div class="chat-room-sub">Internal notes</div>
-                    </div>
-                  </div>
-                </button>
-
-                <button class="chat-room" data-room="ai">
-                  <div class="chat-row">
-                    <div class="chat-avatar role-ai">AI</div>
-                    <div class="chat-row-text">
-                      <div class="chat-room-title">
-                        ChatGPT 5 <span class="room-badge">Coming soon</span>
-                      </div>
-                      <div class="chat-room-sub">AI assistant room</div>
-                    </div>
-                  </div>
-                </button>
-              </div>
-
-              <div class="messages-sidebar-header small">Direct messages</div>
-              <div id="dm-list" class="ms-list">
-
-                <button class="chat-dm" data-dm="1001">
-                  <div class="chat-row">
-                    <div class="dm-avatar-wrap">
-                      <div class="chat-avatar role-agent" data-avatar="1001">A1</div>
-                      <span class="status-dot dot-offline" data-status-dot="1001"></span>
-                    </div>
-                    <div class="chat-row-text">
-                      <div class="chat-room-title" data-name="1001">Agent 01</div>
-                      <div class="chat-room-sub" data-sub="1001">Direct chat</div>
-                    </div>
-                  </div>
-                </button>
-
-                <button class="chat-dm" data-dm="1002">
-                  <div class="chat-row">
-                    <div class="dm-avatar-wrap">
-                      <div class="chat-avatar role-agent" data-avatar="1002">A2</div>
-                      <span class="status-dot dot-offline" data-status-dot="1002"></span>
-                    </div>
-                    <div class="chat-row-text">
-                      <div class="chat-room-title" data-name="1002">Agent 02</div>
-                      <div class="chat-room-sub" data-sub="1002">Direct chat</div>
-                    </div>
-                  </div>
-                </button>
-
-                <button class="chat-dm" data-dm="1003">
-                  <div class="chat-row">
-                    <div class="dm-avatar-wrap">
-                      <div class="chat-avatar role-agent" data-avatar="1003">A3</div>
-                      <span class="status-dot dot-offline" data-status-dot="1003"></span>
-                    </div>
-                    <div class="chat-row-text">
-                      <div class="chat-room-title" data-name="1003">Agent 03</div>
-                      <div class="chat-room-sub" data-sub="1003">Direct chat</div>
-                    </div>
-                  </div>
-                </button>
-
-                <button class="chat-dm" data-dm="2001">
-                  <div class="chat-row">
-                    <div class="dm-avatar-wrap">
-                      <div class="chat-avatar role-supervisor" data-avatar="2001">SD</div>
-                      <span class="status-dot dot-offline" data-status-dot="2001"></span>
-                    </div>
-                    <div class="chat-row-text">
-                      <div class="chat-room-title" data-name="2001">Supervisor Dema</div>
-                      <div class="chat-room-sub" data-sub="2001">Direct chat</div>
-                    </div>
-                  </div>
-                </button>
-
-                <button class="chat-dm" data-dm="2002">
-                  <div class="chat-row">
-                    <div class="dm-avatar-wrap">
-                      <div class="chat-avatar role-supervisor" data-avatar="2002">SM</div>
-                      <span class="status-dot dot-offline" data-status-dot="2002"></span>
-                    </div>
-                    <div class="chat-row-text">
-                      <div class="chat-room-title" data-name="2002">Supervisor Moustafa</div>
-                      <div class="chat-room-sub" data-sub="2002">Direct chat</div>
-                    </div>
-                  </div>
-                </button>
-
-              </div>
-            </aside>
-
-            <!-- CHAT AREA -->
-            <div class="messages-main">
-              <header class="chat-header">
-                <div>
-                  <div class="chat-room-name" id="chat-room-name">Messages</div>
-                  <div class="chat-room-desc" id="chat-room-desc">Start chatting…</div>
-                </div>
-              </header>
-
-              <div id="chat-empty" class="chat-empty">
-                Select a room or a person from the left to start chatting.
-              </div>
-
-              <div id="chat-message-list" class="chat-message-list"></div>
-
-              <form id="chat-form" class="chat-input-row">
-                <input
-                  id="chat-input"
-                  type="text"
-                  autocomplete="off"
-                  placeholder="Type a message…"
-                  class="chat-input"
-                  disabled
-                />
-                <button type="submit" class="chat-send-btn" disabled>Send</button>
-              </form>
-            </div>
-
+          <!-- Search -->
+          <div class="ms-search">
+            <input id="chat-search" type="text" placeholder="Search rooms & people…" autocomplete="off" />
+            <button id="chat-search-x" type="button" class="ms-search-x" title="Clear">×</button>
           </div>
-        </section>
-      </section>
+        </div>
+
+        <!-- ROOMS -->
+        <div class="messages-sidebar-header">Rooms</div>
+        <div id="room-list" class="ms-list">
+
+          <button class="chat-room" data-room="general">
+            <div class="chat-row">
+              <div class="chat-avatar role-room">#</div>
+              <div class="chat-row-text">
+                <div class="chat-room-title">General chat</div>
+                <div class="chat-room-sub">All agents &amp; supervisors</div>
+              </div>
+            </div>
+          </button>
+
+          <button class="chat-room" data-room="supervisors">
+            <div class="chat-row">
+              <div class="chat-avatar role-supervisor">S</div>
+              <div class="chat-row-text">
+                <div class="chat-room-title">
+                  Supervisors <span class="room-badge">Supervisor only</span>
+                </div>
+                <div class="chat-room-sub">Internal notes</div>
+              </div>
+            </div>
+          </button>
+
+          <button class="chat-room" data-room="ai">
+            <div class="chat-row">
+              <div class="chat-avatar role-ai">AI</div>
+              <div class="chat-row-text">
+                <div class="chat-room-title">
+                  ChatGPT 5 <span class="room-badge">Coming soon</span>
+                </div>
+                <div class="chat-room-sub">AI assistant room</div>
+              </div>
+            </div>
+          </button>
+
+        </div>
+
+        <!-- DIRECT MESSAGES -->
+        <div class="messages-sidebar-header small">Direct messages</div>
+        <div id="dm-list" class="ms-list">
+
+          <button class="chat-dm" data-dm="1001">
+            <div class="chat-row">
+              <div class="dm-avatar-wrap">
+                <div class="chat-avatar role-agent" data-avatar="1001">A1</div>
+                <span class="status-dot dot-offline" data-status-dot="1001"></span>
+              </div>
+              <div class="chat-row-text">
+                <div class="chat-room-title" data-name="1001">Agent 01</div>
+                <div class="chat-room-sub" data-sub="1001">Direct chat</div>
+              </div>
+            </div>
+          </button>
+
+          <button class="chat-dm" data-dm="1002">
+            <div class="chat-row">
+              <div class="dm-avatar-wrap">
+                <div class="chat-avatar role-agent" data-avatar="1002">A2</div>
+                <span class="status-dot dot-offline" data-status-dot="1002"></span>
+              </div>
+              <div class="chat-row-text">
+                <div class="chat-room-title" data-name="1002">Agent 02</div>
+                <div class="chat-room-sub" data-sub="1002">Direct chat</div>
+              </div>
+            </div>
+          </button>
+
+          <button class="chat-dm" data-dm="1003">
+            <div class="chat-row">
+              <div class="dm-avatar-wrap">
+                <div class="chat-avatar role-agent" data-avatar="1003">A3</div>
+                <span class="status-dot dot-offline" data-status-dot="1003"></span>
+              </div>
+              <div class="chat-row-text">
+                <div class="chat-room-title" data-name="1003">Agent 03</div>
+                <div class="chat-room-sub" data-sub="1003">Direct chat</div>
+              </div>
+            </div>
+          </button>
+
+          <button class="chat-dm" data-dm="2001">
+            <div class="chat-row">
+              <div class="dm-avatar-wrap">
+                <div class="chat-avatar role-supervisor" data-avatar="2001">SD</div>
+                <span class="status-dot dot-offline" data-status-dot="2001"></span>
+              </div>
+              <div class="chat-row-text">
+                <div class="chat-room-title" data-name="2001">Supervisor Dema</div>
+                <div class="chat-room-sub" data-sub="2001">Direct chat</div>
+              </div>
+            </div>
+          </button>
+
+          <button class="chat-dm" data-dm="2002">
+            <div class="chat-row">
+              <div class="dm-avatar-wrap">
+                <div class="chat-avatar role-supervisor" data-avatar="2002">SM</div>
+                <span class="status-dot dot-offline" data-status-dot="2002"></span>
+              </div>
+              <div class="chat-row-text">
+                <div class="chat-room-title" data-name="2002">Supervisor Moustafa</div>
+                <div class="chat-room-sub" data-sub="2002">Direct chat</div>
+              </div>
+            </div>
+          </button>
+
+        </div>
+
+      </aside>
+
+      <!-- CHAT AREA -->
+      <div class="messages-main">
+        <header class="chat-header">
+          <div>
+            <div class="chat-room-name" id="chat-room-name">Messages</div>
+            <div class="chat-room-desc" id="chat-room-desc">Start chatting…</div>
+          </div>
+        </header>
+
+        <div id="chat-empty" class="chat-empty">
+          Select a room or a person from the left to start chatting.
+        </div>
+
+        <div id="chat-message-list" class="chat-message-list"></div>
+
+        <form id="chat-form" class="chat-input-row">
+          <input
+            id="chat-input"
+            type="text"
+            autocomplete="off"
+            placeholder="Type a message…"
+            class="chat-input"
+            disabled
+          />
+          <button type="submit" class="chat-send-btn" disabled>Send</button>
+        </form>
+      </div>
+
+    </div>
+  </section>
+</section>
+
 
       <!-- SETTINGS PAGE -->
       <section id="page-settings" class="page-section hidden">
@@ -541,3 +548,4 @@
   <script type="module" src="messages.js"></script>
 </body>
 </html>
+
