@@ -579,7 +579,7 @@ input:focus, textarea:focus, select:focus{
 }
 
 /* Sidebar items */
-.chat-room, .chat-dm, chat-recent{
+.chat-room, .chat-dm, .chat-recent{
   width:100%;
   text-align:left;
   border:none;
@@ -593,10 +593,10 @@ input:focus, textarea:focus, select:focus{
   transition: transform .08s ease, background .15s ease, box-shadow .15s ease;
 }
 
-.chat-room:hover, .chat-dm:hover{ background: rgba(255,255,255,.78); }
-.chat-room:active, .chat-dm:active{ transform: scale(.99); }
+.chat-room:hover, .chat-dm:hover, .chat-recent:hover{ background: rgba(255,255,255,.78); }
+.chat-room:active, .chat-dm:active, .chat-recent:active{ transform: scale(.99); }
 
-.chat-room.active, .chat-dm.active,
+.chat-room.active, .chat-dm.active,.chat-dm.active,
 .chat-item-active{
   background: rgba(255,255,255,.92) !important;
   border-color: color-mix(in srgb, var(--brand) 35%, transparent) !important;
@@ -1143,6 +1143,7 @@ input:focus, textarea:focus, select:focus{
   .widgets-grid{ grid-template-columns:1fr; }
   .widget-calendar{ grid-column:auto; }
 }
+
 
 
 
